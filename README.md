@@ -1,34 +1,20 @@
-# Chili Coin Live Wallet Tracker — Version 2
+# Chili Coin Live Wallet Tracker — Version 3 replacement files
 
-A Vercel-ready holder tracker using the supplied Chili Coin mascot and circular logo.
+This update restores the Custodial Reward Activity section using the correct Base ChiliCoin ERC-20 contract:
 
-## Version 2 changes
+`0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
 
-- Removed the transfer-feed navigation, metric card, table and related code.
-- Base holder totals now use the Base ChiliCoin ERC-20 contract page at `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`.
-- The Base contract panel points directly to the token's live BaseScan transfers tab.
-- The **Refresh now** button forces a non-cached request, shows progress, and confirms completion.
-- Added a small-print no-investment-promotion and digital-asset risk disclaimer.
+## What changed
 
-## Live sources
+- Removed the obsolete ERC-1155 activity logic.
+- The activity table now loads recent ERC-20 transfers for the Base CHI token automatically.
+- No API key or wallet address is entered into the page.
+- Amounts are decoded using the token's decimal field, so the table displays 5 CHI or any other actual transfer amount.
+- Rows show time, event, sender, recipient, amount and a BaseScan transaction link.
+- Automatic refresh remains every 20 seconds; both refresh buttons force a non-cached request.
 
-- **Ethereum holder total:** public Ethereum Blockscout token metadata for `0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`.
-- **Base holder total:** the public BaseScan token page for `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`, with Base Blockscout as a disclosed fallback.
-- **Refresh:** automatic every 20 seconds. Manual refresh uses a force parameter and a no-store response.
+## Update the existing GitHub project
 
-## Deploy the update
+Upload all six items from this folder to the top level of the existing GitHub repository. Allow GitHub to replace the files with the same names, commit to `main`, and Vercel will redeploy automatically.
 
-Upload and replace these files in the existing GitHub repository:
-
-- `index.html`
-- `styles.css`
-- `app.js`
-- `api/live.js`
-- `README.md`
-- `SOURCE_NOTES.md`
-
-Keep the existing `assets` folder, `package.json` and `vercel.json`. A commit to the connected production branch should create a new Vercel deployment.
-
-## Important legal limitation
-
-The included disclaimer is general risk-disclosure language and is not a legal opinion. It cannot determine the regulatory classification of CHI or guarantee compliance. Securities, commodities, money-transmission, consumer-protection, advertising, privacy, sanctions, tax and state-law issues may require review by qualified counsel based on the complete facts and how CHI is issued, marketed, distributed and used.
+The existing `assets`, `package.json` and `vercel.json` files should remain in the repository.

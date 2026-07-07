@@ -20,6 +20,7 @@
     <nav class="desktop-nav" aria-label="Primary navigation">
       <a class="active" href="#dashboard">Dashboard</a>
       <a href="#contracts">Contracts</a>
+      <a href="#activity">Reward Activity</a>
       <a href="#disclosure">Data Notes</a>
       <a href="#legal">Legal</a>
     </nav>
@@ -41,6 +42,7 @@
       <div class="sidebar-menu" aria-label="Dashboard sections">
         <a class="selected" href="#dashboard"><span>🔥</span>Live Tracker</a>
         <a href="#contracts"><span>⌘</span>Contracts</a>
+        <a href="#activity"><span>↗</span>Reward Activity</a>
         <a href="#disclosure"><span>✓</span>Data Notes</a>
         <a href="#legal"><span>§</span>Legal</a>
       </div>
@@ -135,6 +137,45 @@
           </div>
           <a class="panel-button" href="https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions" target="_blank" rel="noopener noreferrer">View live Base transfers on BaseScan <span>→</span></a>
         </article>
+      </section>
+
+      <section id="activity" class="activity-panel">
+        <div class="activity-header">
+          <div>
+            <div class="eyebrow small"><span class="live-dot"></span>Latest indexed Base CHI transfers</div>
+            <h2>Custodial Reward Activity</h2>
+            <p>Recent ERC-20 transfers for the Base ChiliCoin contract. The amount is read from the on-chain transfer event, so a distribution may be 5 CHI or any other amount. This table loads automatically; no key or wallet address is required.</p>
+          </div>
+          <button id="activityRefreshButton" class="refresh-button" type="button">↻ Refresh activity</button>
+        </div>
+
+        <div class="activity-summary" aria-live="polite">
+          <span id="activityStatus"><span class="spinner"></span>Loading Base CHI transfers…</span>
+          <span id="activityUpdated">Not updated yet</span>
+        </div>
+
+        <div class="table-shell">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Event</th>
+                <th>From</th>
+                <th>Recipient</th>
+                <th>Amount (CHI)</th>
+                <th>Transaction</th>
+              </tr>
+            </thead>
+            <tbody id="activityRows">
+              <tr><td colspan="6" class="empty-state"><span class="spinner"></span>Loading live Base CHI transfers…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="transferSource">Transfer source: connecting…</span>
+          <a id="allTransactionsLink" href="https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions" target="_blank" rel="noopener noreferrer">View all CHI transfers on BaseScan ↗</a>
+        </div>
+        <p class="activity-caveat">“Transfer” identifies an on-chain movement of CHI. The blockchain record alone does not prove that every transfer was a consumer reward or identify the person controlling a wallet.</p>
       </section>
 
       <section id="disclosure" class="notice-panel">

@@ -1,8 +1,8 @@
-# Source Notes
+# Live source notes
 
-- Ethereum CHI contract: `0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`
-- Base CHI contract: `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
-- Base transfers page used by the site: `https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions`
-- “Custodial” and “non-custodial” are operating-model labels provided for the tracker; public chain data does not independently establish private-key control.
-- Combined holder total is not deduplicated across chains.
-- No Base transfer table is scraped or republished. The site links users to BaseScan for the live transfer record.
+- Ethereum token: `0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`
+- Base ERC-20 token: `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
+- Base explorer: `https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions`
+- Base transfer feed: Base Blockscout account `tokentx` endpoint filtered by `contractaddress`.
+
+The site links every transfer to BaseScan. It uses an indexer API rather than scraping BaseScan's dynamically rendered HTML. Explorer/indexer data may lag the latest block.
