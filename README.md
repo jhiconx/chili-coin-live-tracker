@@ -1,46 +1,34 @@
-# Chili Coin Live Wallet Tracker
+# Chili Coin Live Wallet Tracker — Version 2
 
-A Vercel-ready live website using the supplied Chili Coin mascot and circular logo.
+A Vercel-ready holder tracker using the supplied Chili Coin mascot and circular logo.
 
-## What the tracker reads
+## Version 2 changes
+
+- Removed the transfer-feed navigation, metric card, table and related code.
+- Base holder totals now use the Base ChiliCoin ERC-20 contract page at `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`.
+- The Base contract panel points directly to the token's live BaseScan transfers tab.
+- The **Refresh now** button forces a non-cached request, shows progress, and confirms completion.
+- Added a small-print no-investment-promotion and digital-asset risk disclaimer.
+
+## Live sources
 
 - **Ethereum holder total:** public Ethereum Blockscout token metadata for `0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`.
-- **Base holder total:** the BaseScan page supplied for the ERC-1155 contract `0x65aa05778b093ea8f3ecdaff6f070a30eb15c3d3`, filtered by wallet `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`.
-- **Recent Base activity:** public Base Blockscout ERC-1155 transfer records involving the filtered wallet and token contract.
-- **Refresh:** the browser requests `/api/live` every 20 seconds. The serverless endpoint caches responses for 15 seconds to reduce explorer traffic.
+- **Base holder total:** the public BaseScan token page for `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`, with Base Blockscout as a disclosed fallback.
+- **Refresh:** automatic every 20 seconds. Manual refresh uses a force parameter and a no-store response.
 
-The BaseScan page currently identifies `0x65aa...c3d3` as the ERC-1155 token contract and `0x25Ec...65E8` as the filtered token-holder wallet. The website labels these separately.
+## Deploy the update
 
-## Deploy on Vercel
+Upload and replace these files in the existing GitHub repository:
 
-1. Create a new GitHub repository and upload all files in this folder. Do not upload only `index.html`; the `/api/live.js` file is required.
-2. In Vercel, choose **Add New → Project**, import the GitHub repository, and leave the framework preset as **Other**.
-3. Leave Build Command and Output Directory blank. Vercel will serve the static files and automatically deploy `api/live.js` as a serverless function.
-4. Select **Deploy**.
-5. Open the Vercel URL and confirm that the status changes from “Connecting” to “Live sources connected” or “Live with source warnings.”
+- `index.html`
+- `styles.css`
+- `app.js`
+- `api/live.js`
+- `README.md`
+- `SOURCE_NOTES.md`
 
-No API key is required for the included version.
+Keep the existing `assets` folder, `package.json` and `vercel.json`. A commit to the connected production branch should create a new Vercel deployment.
 
-## Run locally
+## Important legal limitation
 
-```bash
-npm install
-npm run dev
-```
-
-Then open the local URL printed by Vercel CLI.
-
-## Important limitations
-
-- This is **near-real-time**, not a direct block-by-block WebSocket feed. Explorer/indexer data can lag the newest Base block.
-- The BaseScan holder figure is read server-side from the public BaseScan page. If BaseScan changes its page structure or blocks automated reads, the endpoint attempts to identify the issue and can fall back to Blockscout rather than falsely claiming a BaseScan number.
-- “Custodial” and “non-custodial” are operating-model labels supplied for Chili Coin. Public blockchain data cannot independently prove private-key control.
-- The combined chain total is the sum of both chain-level holder figures. It is not a deduplicated count of unique people.
-
-## Main files
-
-- `index.html` — page structure
-- `styles.css` — responsive visual design
-- `app.js` — browser refresh, rendering, search, and activity table
-- `api/live.js` — server-side BaseScan/Blockscout data aggregation
-- `assets/` — supplied Chili Coin branding optimized for the web
+The included disclaimer is general risk-disclosure language and is not a legal opinion. It cannot determine the regulatory classification of CHI or guarantee compliance. Securities, commodities, money-transmission, consumer-protection, advertising, privacy, sanctions, tax and state-law issues may require review by qualified counsel based on the complete facts and how CHI is issued, marketed, distributed and used.

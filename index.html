@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#240805" />
-  <meta name="description" content="Live Chili Coin wallet tracker for Ethereum mainnet and the Base custodial rewards wallet." />
+  <meta name="description" content="Live Chili Coin holder tracker for Ethereum mainnet and Base." />
   <title>Chili Coin — Live Wallet Tracker</title>
   <link rel="preload" href="/assets/chili-mascot.webp" as="image" type="image/webp" />
   <link rel="stylesheet" href="/styles.css" />
@@ -19,13 +19,13 @@
     </a>
     <nav class="desktop-nav" aria-label="Primary navigation">
       <a class="active" href="#dashboard">Dashboard</a>
-      <a href="#activity">Base Activity</a>
       <a href="#contracts">Contracts</a>
-      <a href="#disclosure">Disclosure</a>
+      <a href="#disclosure">Data Notes</a>
+      <a href="#legal">Legal</a>
     </nav>
     <div class="header-actions">
       <span class="live-chip"><span class="live-dot"></span>Live</span>
-      <a class="outline-button" id="baseScanTopLink" href="https://basescan.org/token/0x65aa05778b093ea8f3ecdaff6f070a30eb15c3d3?a=0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions" target="_blank" rel="noopener">Open BaseScan ↗</a>
+      <a class="outline-button" href="https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions" target="_blank" rel="noopener noreferrer">Open BaseScan ↗</a>
     </div>
   </header>
 
@@ -36,19 +36,20 @@
       </div>
       <div class="sidebar-title">
         <strong>Chili Coin</strong>
-        <span>$CHILI</span>
+        <span>$CHI</span>
       </div>
       <div class="sidebar-menu" aria-label="Dashboard sections">
         <a class="selected" href="#dashboard"><span>🔥</span>Live Tracker</a>
-        <a href="#activity"><span>↗</span>Base Activity</a>
         <a href="#contracts"><span>⌘</span>Contracts</a>
         <a href="#disclosure"><span>✓</span>Data Notes</a>
+        <a href="#legal"><span>§</span>Legal</a>
       </div>
       <div class="heat-card">
         <span class="mini-label">Data cadence</span>
         <strong>Fresh every 20 seconds</strong>
-        <p>The page polls its server-side live-data endpoint and does not expose an API key in the browser.</p>
-        <button id="sidebarRefresh" type="button">Refresh now</button>
+        <p>The tracker requests current holder totals from its server-side data endpoint.</p>
+        <button id="sidebarRefresh" type="button" aria-describedby="refreshFeedback">Refresh now</button>
+        <span id="refreshFeedback" class="refresh-feedback" aria-live="polite"></span>
       </div>
     </aside>
 
@@ -57,7 +58,7 @@
         <div class="hero-copy">
           <div class="eyebrow"><span class="live-dot"></span>On-chain Chili intelligence</div>
           <h1>Live Wallet <span>Tracker</span></h1>
-          <p>Ethereum mainnet is presented as the non-custodial side of Chili Coin. Base is presented as the custodial rewards side, using the Base ERC-1155 contract and filtered custodial wallet in the BaseScan source you provided.</p>
+          <p>Track the current holder totals for Chili Coin on Ethereum mainnet and Base. Ethereum is labeled as the non-custodial side and Base as the custodial rewards model based on the operating model supplied for this site.</p>
           <div class="hero-meta">
             <span id="connectionStatus" class="connection-pill loading">Connecting to live sources…</span>
             <span id="lastUpdated">Not updated yet</span>
@@ -69,13 +70,13 @@
         </div>
       </section>
 
-      <section class="metric-grid" aria-label="Live Chili Coin metrics">
+      <section class="metric-grid metric-grid-three" aria-label="Live Chili Coin holder metrics">
         <article class="metric-card eth-card">
           <div class="metric-icon">Ξ</div>
           <div>
             <span class="metric-label">ETH Holders</span>
             <strong id="ethHolders" class="metric-number">—</strong>
-            <span class="metric-sub"><i class="status-bullet green"></i>Non-custodial model</span>
+            <span class="metric-sub"><i class="status-bullet green"></i><span id="ethHolderSource">Ethereum live source</span></span>
           </div>
         </article>
         <article class="metric-card base-card">
@@ -94,14 +95,6 @@
             <span class="metric-sub"><i class="status-bullet red"></i>Not deduplicated across chains</span>
           </div>
         </article>
-        <article class="metric-card activity-card">
-          <div class="metric-icon link-icon">↗</div>
-          <div>
-            <span class="metric-label">Base Activity — 24H</span>
-            <strong id="activity24h" class="metric-number">—</strong>
-            <span id="activityNote" class="metric-sub"><i class="status-bullet amber"></i>Loading transfer feed</span>
-          </div>
-        </article>
       </section>
 
       <section id="contracts" class="chain-grid">
@@ -111,17 +104,17 @@
               <span class="round-chain-icon eth-round">Ξ</span>
               <div>
                 <h2>Ethereum Mainnet</h2>
-                <p>Non-Custodial</p>
+                <p>Non-Custodial Model</p>
               </div>
             </div>
             <span class="panel-live"><span class="live-dot"></span>Live</span>
           </div>
-          <p class="panel-description">The Ethereum holder total is read from a public Ethereum indexer for the $CHILI token contract.</p>
+          <p class="panel-description">The Ethereum holder total is read from a public Ethereum indexer for the CHI token contract.</p>
           <div class="contract-box">
             <span>Token contract</span>
-            <a href="https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA" target="_blank" rel="noopener">0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA ↗</a>
+            <a href="https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA" target="_blank" rel="noopener noreferrer">0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA ↗</a>
           </div>
-          <a class="panel-button" href="https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA" target="_blank" rel="noopener">View on Etherscan <span>→</span></a>
+          <a class="panel-button" href="https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA" target="_blank" rel="noopener noreferrer">View on Etherscan <span>→</span></a>
         </article>
 
         <article class="chain-panel base-panel">
@@ -129,71 +122,37 @@
             <div class="chain-heading-left">
               <span class="round-chain-icon base-round">B</span>
               <div>
-                <h2>Base Rewards</h2>
-                <p>Custodial Operating Model</p>
+                <h2>Base</h2>
+                <p>Custodial Rewards Model</p>
               </div>
             </div>
             <span class="panel-live"><span class="live-dot"></span>Live</span>
           </div>
-          <p class="panel-description">The BaseScan page identifies an ERC-1155 token contract and filters transactions for the custodial Chili wallet.</p>
-          <div class="contract-box stacked">
-            <span>ERC-1155 token contract</span>
-            <a href="https://basescan.org/token/0x65aa05778b093ea8f3ecdaff6f070a30eb15c3d3" target="_blank" rel="noopener">0x65aa05778b093ea8f3ecdaff6f070a30eb15c3d3 ↗</a>
-            <span>Filtered custodial wallet</span>
-            <a href="https://basescan.org/address/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8" target="_blank" rel="noopener">0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8 ↗</a>
+          <p class="panel-description">The Base holder total is read from the Base ChiliCoin ERC-20 token page. Use the link below to review the live on-chain transfers directly on BaseScan.</p>
+          <div class="contract-box">
+            <span>Base token contract</span>
+            <a href="https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8" target="_blank" rel="noopener noreferrer">0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8 ↗</a>
           </div>
-          <a class="panel-button" href="https://basescan.org/token/0x65aa05778b093ea8f3ecdaff6f070a30eb15c3d3?a=0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions" target="_blank" rel="noopener">Open the live BaseScan source <span>→</span></a>
+          <a class="panel-button" href="https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions" target="_blank" rel="noopener noreferrer">View live Base transfers on BaseScan <span>→</span></a>
         </article>
-      </section>
-
-      <section id="activity" class="activity-panel">
-        <div class="activity-header">
-          <div>
-            <div class="eyebrow small"><span class="live-dot"></span>Latest indexed Base events</div>
-            <h2>Custodial Reward Activity</h2>
-            <p>Recent ERC-1155 transfers involving the filtered Base wallet. New activity appears automatically after the next refresh.</p>
-          </div>
-          <div class="activity-controls">
-            <label class="search-box">
-              <span>⌕</span>
-              <input id="activitySearch" type="search" placeholder="Search wallet or transaction" autocomplete="off" />
-            </label>
-            <button id="refreshButton" class="refresh-button" type="button">↻ Refresh</button>
-          </div>
-        </div>
-
-        <div class="table-shell">
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Event</th>
-                <th>Counterparty</th>
-                <th>Token ID</th>
-                <th>Amount</th>
-                <th>Transaction</th>
-              </tr>
-            </thead>
-            <tbody id="activityRows">
-              <tr><td colspan="6" class="empty-state"><span class="spinner"></span>Loading live Base activity…</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="table-footer">
-          <span id="transferSource">Transfer source: connecting…</span>
-          <a id="allTransactionsLink" href="https://basescan.org/token/0x65aa05778b093ea8f3ecdaff6f070a30eb15c3d3?a=0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions" target="_blank" rel="noopener">View all on BaseScan ↗</a>
-        </div>
       </section>
 
       <section id="disclosure" class="notice-panel">
         <div class="notice-icon">✓</div>
         <div>
           <h2>Important Data Notice</h2>
-          <p><strong>Custody classification:</strong> “Non-custodial” and “custodial” reflect the Chili Coin operating model supplied for this tracker. A blockchain explorer shows public addresses and activity, but it does not independently prove who controls private keys.</p>
-          <p><strong>Holder totals:</strong> The combined chain total adds the two chain-level figures. It is not a verified count of unique people, because one person or address may be represented more than once.</p>
-          <p><strong>Refresh behavior:</strong> The tracker is near-real-time, polling public explorer/indexer data every 20 seconds. Explorer indexing can lag the latest Base block.</p>
+          <p><strong>Custody classification:</strong> “Non-custodial” and “custodial” reflect the Chili Coin operating model supplied for this tracker. A blockchain explorer displays public addresses and transactions but does not independently prove who controls private keys.</p>
+          <p><strong>Holder totals:</strong> The combined chain total adds the two chain-level figures. It is not a verified count of unique people or unique wallets because the same person or address may be represented on both chains.</p>
+          <p><strong>Refresh behavior:</strong> The tracker polls public explorer and indexer data every 20 seconds. Explorer indexing may lag the newest blockchain records.</p>
         </div>
         <img src="/assets/chili-ring.webp" alt="Chili Coin circular mark" />
+      </section>
+
+      <section id="legal" class="legal-disclaimer">
+        <h2>No Investment Promotion; Risk and Legal Disclaimer</h2>
+        <p>This website is provided solely for informational, technical, rewards-program and on-chain data-tracking purposes. Nothing on this website constitutes or should be interpreted as an offer to sell, a solicitation of an offer to buy, a recommendation, an endorsement, or investment, financial, legal, accounting or tax advice. CHI is not promoted on this website as an investment, and no representation, promise or assurance is made that CHI will maintain or increase in value, become or remain liquid, or produce any profit, income, yield or other financial return.</p>
+        <p>Digital assets can be highly volatile, illiquid and subject to market, technology, cybersecurity, smart-contract, bridge, custody, counterparty, legal, tax and regulatory risks. CHI may lose some or all of its value, may be difficult or impossible to transfer or use, and may not be available or lawful in every jurisdiction. Any acquisition, holding, transfer or use of CHI is undertaken voluntarily and entirely at the user’s own risk after independent investigation. Holder counts, transfers, historical information and other on-chain data do not predict future value or performance.</p>
+        <p>No person should acquire CHI with an expectation of profit based on the managerial or entrepreneurial efforts of Chili Coin, GFT Rewards, the operator of this website or any associated person. This website makes no determination or warranty regarding the legal, regulatory, tax or securities-law classification of CHI or any related transaction. Users should consult qualified legal, financial and tax advisers and comply with all laws applicable to them. This disclaimer does not replace or guarantee compliance with applicable law. The website and its data are provided “as is” without warranties of accuracy, completeness, timeliness, merchantability, fitness for a particular purpose or non-infringement, to the fullest extent permitted by law.</p>
       </section>
 
       <footer>
