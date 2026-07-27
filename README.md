@@ -1,25 +1,20 @@
-# Chili Coin Live Wallet Tracker — Version 3 replacement files
+# Chili Coin Live Wallet Tracker — Version 5
 
-This update restores the Custodial Reward Activity section using the correct Base ChiliCoin ERC-20 contract:
-
-`0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
+This update removes the floating Chili mascot button that was added in Version 4 and adds the Chili image as the browser tab icon / favicon.
 
 ## What changed
 
-- Removed the obsolete ERC-1155 activity logic.
-- The activity table now loads recent ERC-20 transfers for the Base CHI token automatically.
-- No API key or wallet address is entered into the page.
-- Amounts are decoded using the token's decimal field, so the table displays 5 CHI or any other actual transfer amount.
-- Rows show time, event, sender, recipient, amount and a BaseScan transaction link.
-- Automatic refresh remains every 20 seconds; both refresh buttons force a non-cached request.
+- Removed the floating mascot/emoticon button from the page.
+- Removed the extra hero badge that was added with that change.
+- Added favicon files under `/assets/` so the Chili image appears in the Chrome browser tab.
+- Kept the live tracker, Base CHI reward activity, refresh behavior, legal disclaimer, and `/api/live.js` live-data endpoint unchanged.
 
-## Update the existing GitHub project
+## Upload to GitHub
 
-Upload all six items from this folder to the top level of the existing GitHub repository. Allow GitHub to replace the files with the same names, commit to `main`, and Vercel will redeploy automatically.
+Upload everything inside this replacement folder to the repository root, including the `api` folder and the `assets` folder. GitHub will update the changed files and add the favicon files.
 
-The existing `assets`, `package.json` and `vercel.json` files should remain in the repository.
+Commit message suggestion:
 
-
-## Version 4 update
-
-Added a Chili mascot emoticon/badge that floats on the tracker and links users to the reward activity section. It gently animates when live data refreshes.
+```text
+Add Chili browser tab icon and remove floating badge
+```
