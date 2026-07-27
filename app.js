@@ -24,7 +24,8 @@ const elements = {
   activityStatus: document.querySelector('#activityStatus'),
   activityUpdated: document.querySelector('#activityUpdated'),
   transferSource: document.querySelector('#transferSource'),
-  allTransactionsLink: document.querySelector('#allTransactionsLink')
+  allTransactionsLink: document.querySelector('#allTransactionsLink'),
+  chiliEmoticon: document.querySelector('#chiliEmoticon')
 };
 
 function formatNumber(value) {
@@ -124,6 +125,14 @@ function setRefreshButton({ loading = false, success = false, error = false } = 
   elements.refreshFeedback.textContent = '';
 }
 
+function pulseChiliEmoticon() {
+  if (!elements.chiliEmoticon) return;
+  elements.chiliEmoticon.classList.remove('is-hot');
+  // Restart the animation so every successful refresh gives a small visual cue.
+  void elements.chiliEmoticon.offsetWidth;
+  elements.chiliEmoticon.classList.add('is-hot');
+}
+
 function renderMetrics(data) {
   elements.ethHolders.textContent = formatNumber(data.ethereum?.holders);
   elements.baseHolders.textContent = formatNumber(data.base?.holders);
@@ -216,6 +225,7 @@ async function loadLiveData({ manual = false } = {}) {
     renderMetrics(data);
     renderActivity(data);
     renderStatus(data);
+    pulseChiliEmoticon();
     if (manual) setRefreshButton({ success: true });
   } catch (error) {
     setConnection('bad', 'Live connection failed');

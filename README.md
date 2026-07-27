@@ -18,3 +18,8 @@ This update restores the Custodial Reward Activity section using the correct Bas
 Upload all six items from this folder to the top level of the existing GitHub repository. Allow GitHub to replace the files with the same names, commit to `main`, and Vercel will redeploy automatically.
 
 The existing `assets`, `package.json` and `vercel.json` files should remain in the repository.
+
+
+## Version 4 update
+
+Added a Chili mascot emoticon/badge that floats on the tracker and links users to the reward activity section. It gently animates when live data refreshes.

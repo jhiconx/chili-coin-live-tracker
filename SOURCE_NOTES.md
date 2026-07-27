@@ -6,3 +6,6 @@
 - Base transfer feed: Base Blockscout account `tokentx` endpoint filtered by `contractaddress`.
 
 The site links every transfer to BaseScan. It uses an indexer API rather than scraping BaseScan's dynamically rendered HTML. Explorer/indexer data may lag the latest block.
+
+
+Version 4 adds a visual Chili mascot emoticon using the existing `/assets/chili-mascot.webp` asset. No new data sources were added.
