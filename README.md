@@ -1,32 +1,23 @@
-# Chili Coin Live Wallet Tracker — V6 Transaction Flow
+# Chili Coin Live Wallet Tracker — V8 All-Time TXN Count
 
-This update adds a live TXN card and an all-chain CHI transaction-flow table.
+This replacement update keeps the Chili favicon and transaction-flow table, and changes the TXN card so it represents all indexed CHI ERC-20 transfer events returned by the public indexers, not only the small set of latest rows displayed in the table.
 
-## What changed
+## Upload
 
-- Added a fourth dashboard metric: **TXN — All Chain Transactions**.
-- Added live Ethereum + Base CHI transfer loading from public indexers.
-- Updated the activity section to show CHI flowing **in** and **out** of a pasted wallet address.
-- Added a wallet-focus input, flow filter, and Clear button.
-- Added table columns: Time, Chain, Flow, From, To, Amount (CHI), TXN.
-- Kept the favicon/browser-tab Chili image from V5.
+Upload everything inside this folder to the root of your GitHub repository:
 
-## Upload to GitHub
+- `index.html`
+- `styles.css`
+- `app.js`
+- `api/live.js`
+- `assets/`
+- `README.md`
+- `SOURCE_NOTES.md`
 
-Upload everything inside this replacement folder to the existing `chili-coin-live-tracker` GitHub repository:
+Commit directly to `main`. Vercel should redeploy automatically.
+
+Suggested commit message:
 
 ```text
-index.html
-styles.css
-app.js
-api
-assets
-README.md
-SOURCE_NOTES.md
+Show all-time CHI transfer count
 ```
-
-Commit directly to `main`. Vercel should automatically redeploy.
-
-## Note about the TXN number
-
-The TXN card shows the latest indexed transfer-event count loaded from the public Ethereum and Base indexers during the live refresh. It is not a verified all-time transaction count.

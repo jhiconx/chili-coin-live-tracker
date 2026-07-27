@@ -154,9 +154,9 @@
       <section id="activity" class="activity-panel">
         <div class="activity-header">
           <div>
-            <div class="eyebrow small"><span class="live-dot"></span>Latest indexed all-chain CHI transfers</div>
+            <div class="eyebrow small"><span class="live-dot"></span>All-time indexed CHI transfer count + latest rows</div>
             <h2>CHI Transaction Flow</h2>
-            <p>Recent ERC-20 transfers for CHI on Ethereum and Base. Paste any wallet address to see CHI flowing <strong>in</strong> and <strong>out</strong> of that wallet. The amount is read from the on-chain transfer event, so a distribution may be 5 CHI or any other amount.</p>
+            <p>All-time indexed ERC-20 transfer count for CHI on Ethereum and Base, plus the latest live rows. Paste any wallet address to see CHI flowing <strong>in</strong> and <strong>out</strong> of that wallet. The table now shows the <strong>Source Wallet</strong> that initiated the transaction separately from the ERC-20 <strong>Token From</strong> and <strong>Recipient</strong> fields, so Base reward distributions such as 5 CHI can show the wallet that sent or initiated them.</p>
           </div>
           <button id="activityRefreshButton" class="refresh-button" type="button">↻ Refresh TXN</button>
         </div>
@@ -164,7 +164,7 @@
         <div class="activity-controls" aria-label="Transaction flow filters">
           <label>
             <span>Wallet focus</span>
-            <input id="walletFocusInput" type="search" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Paste wallet to classify CHI In / CHI Out" />
+            <input id="walletFocusInput" type="search" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Paste source, sender, or recipient wallet" />
           </label>
           <label>
             <span>Flow</span>
@@ -189,14 +189,15 @@
                 <th>Time</th>
                 <th>Chain</th>
                 <th>Flow</th>
-                <th>From</th>
-                <th>To</th>
+                <th>Source Wallet</th>
+                <th>Token From</th>
+                <th>Recipient</th>
                 <th>Amount (CHI)</th>
                 <th>TXN</th>
               </tr>
             </thead>
             <tbody id="activityRows">
-              <tr><td colspan="7" class="empty-state"><span class="spinner"></span>Loading live all-chain CHI transactions…</td></tr>
+              <tr><td colspan="8" class="empty-state"><span class="spinner"></span>Loading live all-chain CHI transactions…</td></tr>
             </tbody>
           </table>
         </div>
@@ -207,7 +208,7 @@
             <a id="ethTransactionsLink" href="https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA#tokentxns" target="_blank" rel="noopener noreferrer">Etherscan ↗</a>
           </span>
         </div>
-        <p class="activity-caveat">“TXN” shows the latest indexed CHI transfer events available to the live public sources. A blockchain record shows token movement, but it does not by itself prove that a transfer was a consumer reward or identify the person controlling a wallet.</p>
+        <p class="activity-caveat">“TXN” counts all indexed CHI ERC-20 transfer events returned by the public indexers and shows the latest rows below. The rows join CHI transfer events with contract transaction records when available so the site can show the transaction signer/source wallet separately from the ERC-20 sender and recipient. A blockchain record shows token movement, but it does not by itself prove that a transfer was a consumer reward or identify the person controlling a wallet.</p>
       </section>
 
       <section id="disclosure" class="notice-panel">
@@ -216,7 +217,7 @@
           <h2>Important Data Notice</h2>
           <p><strong>Custody classification:</strong> “Non-custodial” and “custodial” reflect the Chili Coin operating model supplied for this tracker. A blockchain explorer displays public addresses and transactions but does not independently prove who controls private keys.</p>
           <p><strong>Holder totals:</strong> The combined chain total adds the two chain-level figures. It is not a verified count of unique people or unique wallets because the same person or address may be represented on both chains.</p>
-          <p><strong>Refresh behavior:</strong> The tracker polls public explorer and indexer data every 20 seconds. Explorer indexing may lag the newest blockchain records. The TXN card shows the latest indexed transfer records loaded across Ethereum and Base, not a verified all-time count.</p>
+          <p><strong>Refresh behavior:</strong> The tracker polls public explorer and indexer data every 20 seconds. Explorer indexing may lag the newest blockchain records. The TXN card is designed to show the all-time indexed ERC-20 transfer-event count returned by the public indexers across Ethereum and Base. The table below shows the latest loaded rows and joins them with transaction-signer records when public indexers provide them. Explorer indexing may lag or differ from another explorer’s displayed count.</p>
         </div>
         <img src="/assets/chili-ring.webp" alt="Chili Coin circular mark" />
       </section>

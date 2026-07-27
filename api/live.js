@@ -5,6 +5,8 @@ const ETHERSCAN_URL = `https://etherscan.io/token/${ETH_TOKEN}`;
 const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
 const TIMEOUT_MS = 12_000;
+const TRANSFER_FETCH_LIMIT = '10000';
+const TABLE_RECORD_LIMIT = 300;
 
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
@@ -154,7 +156,7 @@ function normalizeTransfer(item, chain) {
   };
 }
 
-async function fetchTokenTransfers(chain, offset = '100') {
+async function fetchTokenTransfers(chain, offset = TRANSFER_FETCH_LIMIT) {
   const params = new URLSearchParams({
     module: 'account',
     action: 'tokentx',
@@ -185,12 +187,84 @@ async function fetchTokenTransfers(chain, offset = '100') {
     if (transfers.length >= Number(offset)) break;
   }
 
+  const totalCount = transfers.length;
+  const capped = totalCount >= Number(offset);
+
   return {
-    transfers,
+    transfers: transfers.slice(0, TABLE_RECORD_LIMIT),
+    totalCount,
+    fetchedLimit: Number(offset),
+    capped,
     source: chain.source,
     sourceUrl: chain.sourceUrl,
     explorerUrl: chain.explorerUrl
   };
+}
+
+
+async function fetchContractTransactions(chain, offset = '200') {
+  const params = new URLSearchParams({
+    module: 'account',
+    action: 'txlist',
+    address: chain.token,
+    page: '1',
+    offset,
+    sort: 'desc'
+  });
+  const url = `${chain.compatApi}?${params.toString()}`;
+  const response = await fetchWithTimeout(url, { headers: { accept: 'application/json' } });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const data = await response.json();
+  const result = Array.isArray(data.result) ? data.result : [];
+  if (!result.length && data.status !== '1') {
+    throw new Error(String(data.message || data.result || 'No contract transactions returned'));
+  }
+
+  const byHash = new Map();
+  for (const tx of result) {
+    const hash = String(tx.hash || '').toLowerCase();
+    if (!hash) continue;
+    byHash.set(hash, {
+      transactionHash: hash,
+      initiator: String(tx.from || '').toLowerCase(),
+      calledContract: String(tx.to || chain.token).toLowerCase(),
+      methodId: tx.methodId || null,
+      functionName: tx.functionName || null,
+      isError: tx.isError === '1',
+      timestamp: tx.timeStamp ? new Date(Number(tx.timeStamp) * 1000).toISOString() : null,
+      blockNumber: String(tx.blockNumber || '')
+    });
+  }
+
+  return {
+    transactions: [...byHash.values()],
+    byHash,
+    source: `${chain.label} Blockscout contract transaction indexer`,
+    sourceUrl: `${chain.sourceUrl}&view=contract_transactions`
+  };
+}
+
+function enrichTransfersWithTransactions(transfers, txInfo) {
+  const txMap = txInfo?.byHash instanceof Map ? txInfo.byHash : new Map();
+  return transfers.map(transfer => {
+    const tx = txMap.get(String(transfer.transactionHash || '').toLowerCase());
+    const initiator = tx?.initiator || transfer.from || null;
+    return {
+      ...transfer,
+      sourceWallet: initiator,
+      sourceWalletUrl: initiator
+        ? `${transfer.chainKey === 'ethereum' ? 'https://etherscan.io/address' : 'https://basescan.org/address'}/${initiator}`
+        : null,
+      transactionInitiator: tx?.initiator || null,
+      calledContract: tx?.calledContract || null,
+      methodId: tx?.methodId || null,
+      functionName: tx?.functionName || null,
+      transactionLevelTimestamp: tx?.timestamp || null,
+      timestamp: transfer.timestamp || tx?.timestamp || null,
+      blockNumber: transfer.blockNumber || tx?.blockNumber || ''
+    };
+  });
 }
 
 function sortTransfers(a, b) {
@@ -237,12 +311,14 @@ export default async function handler(req, res) {
     }
   };
 
-  const [baseScan, ethInfo, baseInfo, ethTransfers, baseTransfers] = await Promise.allSettled([
+  const [baseScan, ethInfo, baseInfo, ethTransfers, baseTransfers, ethContractTxs, baseContractTxs] = await Promise.allSettled([
     fetchBaseScanHolderCount(),
     fetchTokenInfo('https://eth.blockscout.com/api/v2', ETH_TOKEN),
     fetchTokenInfo('https://base.blockscout.com/api/v2', BASE_TOKEN),
-    fetchTokenTransfers(chainConfigs.ethereum, '100'),
-    fetchTokenTransfers(chainConfigs.base, '100')
+    fetchTokenTransfers(chainConfigs.ethereum, TRANSFER_FETCH_LIMIT),
+    fetchTokenTransfers(chainConfigs.base, TRANSFER_FETCH_LIMIT),
+    fetchContractTransactions(chainConfigs.ethereum, '250'),
+    fetchContractTransactions(chainConfigs.base, '250')
   ]);
 
   const warnings = [];
@@ -251,12 +327,18 @@ export default async function handler(req, res) {
   const baseInfoValue = baseInfo.status === 'fulfilled' ? baseInfo.value : null;
   const ethTransferValue = ethTransfers.status === 'fulfilled' ? ethTransfers.value : null;
   const baseTransferValue = baseTransfers.status === 'fulfilled' ? baseTransfers.value : null;
+  const ethContractTxValue = ethContractTxs.status === 'fulfilled' ? ethContractTxs.value : null;
+  const baseContractTxValue = baseContractTxs.status === 'fulfilled' ? baseContractTxs.value : null;
 
   if (!baseScanValue) warnings.push(`BaseScan holder count unavailable: ${baseScan.reason?.message || 'unknown error'}`);
   if (!ethValue) warnings.push(`Ethereum holder count unavailable: ${ethInfo.reason?.message || 'unknown error'}`);
   if (!baseInfoValue) warnings.push(`Base token metadata unavailable: ${baseInfo.reason?.message || 'unknown error'}`);
-  if (!ethTransferValue) warnings.push(`Ethereum CHI transfer feed unavailable: ${ethTransfers.reason?.message || 'unknown error'}`);
-  if (!baseTransferValue) warnings.push(`Base CHI transfer feed unavailable: ${baseTransfers.reason?.message || 'unknown error'}`);
+  if (!ethTransferValue) warnings.push(`Ethereum CHI transfer-event feed unavailable: ${ethTransfers.reason?.message || 'unknown error'}`);
+  if (!baseTransferValue) warnings.push(`Base CHI transfer-event feed unavailable: ${baseTransfers.reason?.message || 'unknown error'}`);
+  if (!ethContractTxValue) warnings.push(`Ethereum CHI transaction-signer feed unavailable: ${ethContractTxs.reason?.message || 'unknown error'}`);
+  if (!baseContractTxValue) warnings.push(`Base CHI transaction-signer feed unavailable: ${baseContractTxs.reason?.message || 'unknown error'}`);
+  if (ethTransferValue?.capped) warnings.push(`Ethereum CHI transfer count reached the ${ethTransferValue.fetchedLimit.toLocaleString('en-US')} record fetch limit, so the all-time count may be higher.`);
+  if (baseTransferValue?.capped) warnings.push(`Base CHI transfer count reached the ${baseTransferValue.fetchedLimit.toLocaleString('en-US')} record fetch limit, so the all-time count may be higher.`);
 
   let baseHolders = baseScanValue?.count ?? null;
   let baseHolderSource = baseScanValue?.source ?? null;
@@ -274,9 +356,12 @@ export default async function handler(req, res) {
     ? ethHolders + baseHolders
     : null;
 
-  const ethTransferRows = ethTransferValue?.transfers || [];
-  const baseTransferRows = baseTransferValue?.transfers || [];
-  const allTransfers = [...ethTransferRows, ...baseTransferRows].sort(sortTransfers).slice(0, 150);
+  const ethTransferRows = enrichTransfersWithTransactions(ethTransferValue?.transfers || [], ethContractTxValue);
+  const baseTransferRows = enrichTransfersWithTransactions(baseTransferValue?.transfers || [], baseContractTxValue);
+  const ethTransferTotal = Number.isFinite(ethTransferValue?.totalCount) ? ethTransferValue.totalCount : ethTransferRows.length;
+  const baseTransferTotal = Number.isFinite(baseTransferValue?.totalCount) ? baseTransferValue.totalCount : baseTransferRows.length;
+  const allTransferTotal = ethTransferTotal + baseTransferTotal;
+  const allTransfers = [...ethTransferRows, ...baseTransferRows].sort(sortTransfers).slice(0, TABLE_RECORD_LIMIT);
 
   return res.status(200).json({
     ok: Boolean(baseHolders !== null || ethHolders !== null || allTransfers.length),
@@ -294,9 +379,12 @@ export default async function handler(req, res) {
       transferExplorerUrl: ETHERSCAN_TX_URL,
       token: ethValue,
       transfers: ethTransferRows,
-      transferCount: ethTransferRows.length,
+      transferCount: ethTransferTotal,
+      visibleTransferCount: ethTransferRows.length,
       transferSource: ethTransferValue?.source || null,
-      transferSourceUrl: ethTransferValue?.sourceUrl || null
+      transferSourceUrl: ethTransferValue?.sourceUrl || null,
+      signerSource: ethContractTxValue?.source || null,
+      signerSourceUrl: ethContractTxValue?.sourceUrl || null
     },
     base: {
       holders: baseHolders,
@@ -305,21 +393,29 @@ export default async function handler(req, res) {
       explorerUrl: BASESCAN_URL,
       token: baseInfoValue,
       transfers: baseTransferRows,
-      transferCount: baseTransferRows.length,
+      transferCount: baseTransferTotal,
+      visibleTransferCount: baseTransferRows.length,
       transferSource: baseTransferValue?.source || null,
       transferSourceUrl: baseTransferValue?.sourceUrl || null,
+      signerSource: baseContractTxValue?.source || null,
+      signerSourceUrl: baseContractTxValue?.sourceUrl || null,
       transferExplorerUrl: BASESCAN_URL
     },
     transactions: {
+      totalCount: allTransferTotal,
       latestCount: allTransfers.length,
+      ethereumTotalCount: ethTransferTotal,
+      baseTotalCount: baseTransferTotal,
       ethereumLatestCount: ethTransferRows.length,
       baseLatestCount: baseTransferRows.length,
       label: 'All Chain Transactions',
-      note: 'This is the latest indexed transfer-event count loaded from public ETH and Base indexers, not a verified all-time transaction total.',
+      note: 'The TXN card counts all indexed CHI ERC-20 Transfer events returned by the public indexers, not just the latest rows displayed below. The table shows the latest loaded records and joins them to contract transaction records when available so Source Wallet can be shown separately from Token From.',
       records: allTransfers,
       sources: [
         ethTransferValue?.source || null,
-        baseTransferValue?.source || null
+        baseTransferValue?.source || null,
+        ethContractTxValue?.source || null,
+        baseContractTxValue?.source || null
       ].filter(Boolean),
       explorerLinks: {
         ethereum: ETHERSCAN_TX_URL,

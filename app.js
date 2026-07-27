@@ -142,7 +142,7 @@ function renderMetrics(data) {
   elements.ethHolders.textContent = formatNumber(data.ethereum?.holders);
   elements.baseHolders.textContent = formatNumber(data.base?.holders);
   elements.chainTotal.textContent = formatNumber(data.chainTotal);
-  if (elements.allChainTransactions) elements.allChainTransactions.textContent = formatNumber(data.transactions?.latestCount);
+  if (elements.allChainTransactions) elements.allChainTransactions.textContent = formatNumber(data.transactions?.totalCount ?? data.transactions?.latestCount);
   if (elements.txnSource) elements.txnSource.textContent = data.transactions?.label || 'All Chain Transactions';
   elements.ethHolderSource.textContent = data.ethereum?.holderSource || 'Ethereum source unavailable';
   elements.baseHolderSource.textContent = data.base?.holderSource || 'Base source unavailable';
@@ -159,10 +159,11 @@ function chainClass(chainKey) {
 function flowForTransfer(item, focusWallet) {
   const from = String(item.from || '').toLowerCase();
   const to = String(item.to || '').toLowerCase();
+  const sourceWallet = String(item.sourceWallet || item.transactionInitiator || '').toLowerCase();
   if (focusWallet) {
     if (from === focusWallet && to === focusWallet) return 'Self';
     if (to === focusWallet) return 'In';
-    if (from === focusWallet) return 'Out';
+    if (from === focusWallet || sourceWallet === focusWallet) return 'Out';
     return 'Other';
   }
   return item.event || 'Transfer';
@@ -203,11 +204,11 @@ function renderActivity(data) {
   const transfers = filteredTransfers(data);
   const totalLoaded = allTransferRecords(data).length;
   const fetched = normalizeTimestamp(data.fetchedAt);
-  const ethCount = data.transactions?.ethereumLatestCount ?? data.ethereum?.transferCount ?? 0;
-  const baseCount = data.transactions?.baseLatestCount ?? data.base?.transferCount ?? 0;
+  const ethCount = data.transactions?.ethereumTotalCount ?? data.ethereum?.transferCount ?? data.transactions?.ethereumLatestCount ?? 0;
+  const baseCount = data.transactions?.baseTotalCount ?? data.base?.transferCount ?? data.transactions?.baseLatestCount ?? 0;
   const focusWallet = normalizeAddress(state.focusWallet);
 
-  elements.transferSource.textContent = `Transfer source: ETH ${formatNumber(ethCount)} + Base ${formatNumber(baseCount)} latest indexed transfers`;
+  elements.transferSource.textContent = `Transfer source: ETH ${formatNumber(ethCount)} + Base ${formatNumber(baseCount)} all-time indexed transfers`;
   if (elements.baseTransactionsLink) elements.baseTransactionsLink.href = data.transactions?.explorerLinks?.base || BASESCAN_TX_URL;
   if (elements.ethTransactionsLink) elements.ethTransactionsLink.href = data.transactions?.explorerLinks?.ethereum || ETHERSCAN_TX_URL;
   elements.activityUpdated.textContent = fetched
@@ -216,27 +217,29 @@ function renderActivity(data) {
 
   if (!totalLoaded) {
     elements.activityStatus.textContent = 'No CHI transaction records were returned by the live sources.';
-    elements.activityRows.innerHTML = '<tr><td colspan="7" class="empty-state">No ETH or Base CHI transfers were returned. Use “Refresh TXN” to retry, or open the explorer links below.</td></tr>';
+    elements.activityRows.innerHTML = '<tr><td colspan="8" class="empty-state">No ETH or Base CHI transfers were returned. Use “Refresh TXN” to retry, or open the explorer links below.</td></tr>';
     return;
   }
 
   if (!transfers.length) {
     const message = focusWallet
-      ? 'No CHI in/out transfers matched that wallet in the latest indexed records.'
+      ? 'No CHI in/out transfers matched that wallet in the latest loaded records.'
       : 'No CHI transfers matched the selected filter.';
     elements.activityStatus.textContent = message;
-    elements.activityRows.innerHTML = `<tr><td colspan="7" class="empty-state">${escapeHtml(message)}</td></tr>`;
+    elements.activityRows.innerHTML = `<tr><td colspan="8" class="empty-state">${escapeHtml(message)}</td></tr>`;
     return;
   }
 
   const focusText = focusWallet ? ` for ${shortHash(focusWallet, 8, 6)}` : '';
-  elements.activityStatus.textContent = `Showing ${transfers.length} of ${totalLoaded} latest indexed CHI transaction${totalLoaded === 1 ? '' : 's'}${focusText}.`;
+  elements.activityStatus.textContent = `Showing ${transfers.length} latest rows of ${formatNumber((data.transactions?.totalCount ?? totalLoaded))} all-time indexed CHI transaction${totalLoaded === 1 ? '' : 's'}${focusText}. Source Wallet is the transaction signer when available; Token From/Recipient come from the ERC-20 transfer event.`;
   elements.activityRows.innerHTML = transfers.map(item => {
     const tx = item.transactionHash || '';
     const from = item.from || '';
     const to = item.to || '';
     const flow = flowForTransfer(item, focusWallet);
     const txLink = item.transactionUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/tx/${tx}` : `https://basescan.org/tx/${tx}`);
+    const sourceWallet = item.sourceWallet || item.transactionInitiator || from;
+    const sourceLink = item.sourceWalletUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/address/${sourceWallet}` : `https://basescan.org/address/${sourceWallet}`);
     const fromLink = item.fromUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/address/${from}` : `https://basescan.org/address/${from}`);
     const toLink = item.toUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/address/${to}` : `https://basescan.org/address/${to}`);
     return `
@@ -244,6 +247,7 @@ function renderActivity(data) {
         <td title="${escapeHtml(item.timestamp || '')}">${escapeHtml(relativeTime(item.timestamp))}</td>
         <td><span class="chain-pill ${chainClass(item.chainKey)}">${escapeHtml(item.chain || 'Chain')}</span></td>
         <td><span class="flow-tag ${flowClass(flow)}">${escapeHtml(flow)}</span></td>
+        <td><a class="mono-link" href="${sourceLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(sourceWallet)}">${escapeHtml(shortHash(sourceWallet))}</a></td>
         <td><a class="mono-link" href="${fromLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(from)}">${escapeHtml(shortHash(from))}</a></td>
         <td><a class="mono-link" href="${toLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(to)}">${escapeHtml(shortHash(to))}</a></td>
         <td class="amount-cell">${escapeHtml(formatDecimalString(item.amount))}</td>
@@ -300,7 +304,7 @@ async function loadLiveData({ manual = false } = {}) {
     elements.lastUpdated.textContent = error instanceof Error ? error.message : 'Unknown refresh error';
     if (elements.activityStatus) elements.activityStatus.textContent = 'CHI transaction refresh failed.';
     if (!state.data && elements.activityRows) {
-      elements.activityRows.innerHTML = '<tr><td colspan="7" class="empty-state">The live endpoint could not be reached. Vercel will retry on the next automatic refresh.</td></tr>';
+      elements.activityRows.innerHTML = '<tr><td colspan="8" class="empty-state">The live endpoint could not be reached. Vercel will retry on the next automatic refresh.</td></tr>';
     }
     if (manual) setRefreshButton({ error: true });
   } finally {
