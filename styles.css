@@ -511,3 +511,76 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
   .activity-panel { padding: 17px; }
   .activity-summary, .table-footer { flex-direction: column; }
 }
+
+/* Version 6: all-chain CHI transaction flow */
+.txn-card { border-color: rgba(255, 191, 61, .66); }
+.txn-icon { background: linear-gradient(145deg, #ffbe2e, #d54b07); font-size: 30px; }
+.status-bullet.blue { background: #41a4ff; box-shadow: 0 0 10px rgba(65,164,255,.42); }
+
+.activity-controls {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 190px auto;
+  gap: 12px;
+  align-items: end;
+  margin: 0 0 14px;
+}
+.activity-controls label { display: grid; gap: 6px; }
+.activity-controls label span {
+  color: #bca39a;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.activity-controls input,
+.activity-controls select {
+  width: 100%;
+  min-height: 45px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 13px;
+  color: #fff9f3;
+  background: rgba(255, 255, 255, .045);
+  padding: 0 13px;
+  outline: none;
+}
+.activity-controls input:focus,
+.activity-controls select:focus {
+  border-color: rgba(255, 147, 43, .75);
+  box-shadow: 0 0 0 3px rgba(255, 120, 26, .10);
+}
+.activity-controls button {
+  min-height: 45px;
+  border: 1px solid rgba(255, 103, 22, .5);
+  border-radius: 13px;
+  color: #ffe2ce;
+  background: rgba(255, 87, 16, .06);
+  font-weight: 850;
+  cursor: pointer;
+  padding: 0 16px;
+}
+.activity-controls button:hover { background: rgba(255, 87, 16, .14); }
+
+.chain-pill,
+.flow-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  min-width: 58px;
+}
+.chain-pill.ethereum { color: #d9cbff; background: rgba(137, 97, 255, .14); }
+.chain-pill.base { color: #b9d6ff; background: rgba(43, 119, 255, .14); }
+.flow-tag.in { color: #80e9a0; background: rgba(69,214,111,.12); }
+.flow-tag.out { color: #ff9a8f; background: rgba(241,50,42,.14); }
+.flow-tag.self { color: #ffd77a; background: rgba(255, 184, 55, .12); }
+.flow-tag.mint { color: #80e9a0; background: rgba(69,214,111,.10); }
+.flow-tag.burn { color: #ff8c86; background: rgba(241,50,42,.12); }
+.flow-tag.transfer { color: #ffbd63; background: rgba(255,155,23,.11); }
+.explorer-links { display: inline-flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .activity-controls { grid-template-columns: 1fr; }
+}

@@ -24,7 +24,7 @@
     <nav class="desktop-nav" aria-label="Primary navigation">
       <a class="active" href="#dashboard">Dashboard</a>
       <a href="#contracts">Contracts</a>
-      <a href="#activity">Reward Activity</a>
+      <a href="#activity">TXN Flow</a>
       <a href="#disclosure">Data Notes</a>
       <a href="#legal">Legal</a>
     </nav>
@@ -46,14 +46,14 @@
       <div class="sidebar-menu" aria-label="Dashboard sections">
         <a class="selected" href="#dashboard"><span>🔥</span>Live Tracker</a>
         <a href="#contracts"><span>⌘</span>Contracts</a>
-        <a href="#activity"><span>↗</span>Reward Activity</a>
+        <a href="#activity"><span>↕</span>TXN Flow</a>
         <a href="#disclosure"><span>✓</span>Data Notes</a>
         <a href="#legal"><span>§</span>Legal</a>
       </div>
       <div class="heat-card">
         <span class="mini-label">Data cadence</span>
         <strong>Fresh every 20 seconds</strong>
-        <p>The tracker requests current holder totals from its server-side data endpoint.</p>
+        <p>The tracker requests current holder totals and CHI transaction flow from its server-side data endpoint.</p>
         <button id="sidebarRefresh" type="button" aria-describedby="refreshFeedback">Refresh now</button>
         <span id="refreshFeedback" class="refresh-feedback" aria-live="polite"></span>
       </div>
@@ -76,7 +76,7 @@
         </div>
       </section>
 
-      <section class="metric-grid metric-grid-three" aria-label="Live Chili Coin holder metrics">
+      <section class="metric-grid" aria-label="Live Chili Coin holder and transaction metrics">
         <article class="metric-card eth-card">
           <div class="metric-icon">Ξ</div>
           <div>
@@ -99,6 +99,14 @@
             <span class="metric-label">Chain Holder Total</span>
             <strong id="chainTotal" class="metric-number">—</strong>
             <span class="metric-sub"><i class="status-bullet red"></i>Not deduplicated across chains</span>
+          </div>
+        </article>
+        <article class="metric-card txn-card">
+          <div class="metric-icon txn-icon">↕</div>
+          <div>
+            <span class="metric-label">TXN</span>
+            <strong id="allChainTransactions" class="metric-number">—</strong>
+            <span class="metric-sub"><i class="status-bullet blue"></i><span id="txnSource">All Chain Transactions</span></span>
           </div>
         </article>
       </section>
@@ -146,15 +154,31 @@
       <section id="activity" class="activity-panel">
         <div class="activity-header">
           <div>
-            <div class="eyebrow small"><span class="live-dot"></span>Latest indexed Base CHI transfers</div>
-            <h2>Custodial Reward Activity</h2>
-            <p>Recent ERC-20 transfers for the Base ChiliCoin contract. The amount is read from the on-chain transfer event, so a distribution may be 5 CHI or any other amount. This table loads automatically; no key or wallet address is required.</p>
+            <div class="eyebrow small"><span class="live-dot"></span>Latest indexed all-chain CHI transfers</div>
+            <h2>CHI Transaction Flow</h2>
+            <p>Recent ERC-20 transfers for CHI on Ethereum and Base. Paste any wallet address to see CHI flowing <strong>in</strong> and <strong>out</strong> of that wallet. The amount is read from the on-chain transfer event, so a distribution may be 5 CHI or any other amount.</p>
           </div>
-          <button id="activityRefreshButton" class="refresh-button" type="button">↻ Refresh activity</button>
+          <button id="activityRefreshButton" class="refresh-button" type="button">↻ Refresh TXN</button>
+        </div>
+
+        <div class="activity-controls" aria-label="Transaction flow filters">
+          <label>
+            <span>Wallet focus</span>
+            <input id="walletFocusInput" type="search" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Paste wallet to classify CHI In / CHI Out" />
+          </label>
+          <label>
+            <span>Flow</span>
+            <select id="directionFilter">
+              <option value="all">All flow</option>
+              <option value="in">CHI In only</option>
+              <option value="out">CHI Out only</option>
+            </select>
+          </label>
+          <button id="clearWalletFilter" type="button">Clear</button>
         </div>
 
         <div class="activity-summary" aria-live="polite">
-          <span id="activityStatus"><span class="spinner"></span>Loading Base CHI transfers…</span>
+          <span id="activityStatus"><span class="spinner"></span>Loading all-chain CHI transactions…</span>
           <span id="activityUpdated">Not updated yet</span>
         </div>
 
@@ -163,23 +187,27 @@
             <thead>
               <tr>
                 <th>Time</th>
-                <th>Event</th>
+                <th>Chain</th>
+                <th>Flow</th>
                 <th>From</th>
-                <th>Recipient</th>
+                <th>To</th>
                 <th>Amount (CHI)</th>
-                <th>Transaction</th>
+                <th>TXN</th>
               </tr>
             </thead>
             <tbody id="activityRows">
-              <tr><td colspan="6" class="empty-state"><span class="spinner"></span>Loading live Base CHI transfers…</td></tr>
+              <tr><td colspan="7" class="empty-state"><span class="spinner"></span>Loading live all-chain CHI transactions…</td></tr>
             </tbody>
           </table>
         </div>
         <div class="table-footer">
           <span id="transferSource">Transfer source: connecting…</span>
-          <a id="allTransactionsLink" href="https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions" target="_blank" rel="noopener noreferrer">View all CHI transfers on BaseScan ↗</a>
+          <span class="explorer-links">
+            <a id="baseTransactionsLink" href="https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions" target="_blank" rel="noopener noreferrer">BaseScan ↗</a>
+            <a id="ethTransactionsLink" href="https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA#tokentxns" target="_blank" rel="noopener noreferrer">Etherscan ↗</a>
+          </span>
         </div>
-        <p class="activity-caveat">“Transfer” identifies an on-chain movement of CHI. The blockchain record alone does not prove that every transfer was a consumer reward or identify the person controlling a wallet.</p>
+        <p class="activity-caveat">“TXN” shows the latest indexed CHI transfer events available to the live public sources. A blockchain record shows token movement, but it does not by itself prove that a transfer was a consumer reward or identify the person controlling a wallet.</p>
       </section>
 
       <section id="disclosure" class="notice-panel">
@@ -188,7 +216,7 @@
           <h2>Important Data Notice</h2>
           <p><strong>Custody classification:</strong> “Non-custodial” and “custodial” reflect the Chili Coin operating model supplied for this tracker. A blockchain explorer displays public addresses and transactions but does not independently prove who controls private keys.</p>
           <p><strong>Holder totals:</strong> The combined chain total adds the two chain-level figures. It is not a verified count of unique people or unique wallets because the same person or address may be represented on both chains.</p>
-          <p><strong>Refresh behavior:</strong> The tracker polls public explorer and indexer data every 20 seconds. Explorer indexing may lag the newest blockchain records.</p>
+          <p><strong>Refresh behavior:</strong> The tracker polls public explorer and indexer data every 20 seconds. Explorer indexing may lag the newest blockchain records. The TXN card shows the latest indexed transfer records loaded across Ethereum and Base, not a verified all-time count.</p>
         </div>
         <img src="/assets/chili-ring.webp" alt="Chili Coin circular mark" />
       </section>

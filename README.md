@@ -1,20 +1,32 @@
-# Chili Coin Live Wallet Tracker — Version 5
+# Chili Coin Live Wallet Tracker — V6 Transaction Flow
 
-This update removes the floating Chili mascot button that was added in Version 4 and adds the Chili image as the browser tab icon / favicon.
+This update adds a live TXN card and an all-chain CHI transaction-flow table.
 
 ## What changed
 
-- Removed the floating mascot/emoticon button from the page.
-- Removed the extra hero badge that was added with that change.
-- Added favicon files under `/assets/` so the Chili image appears in the Chrome browser tab.
-- Kept the live tracker, Base CHI reward activity, refresh behavior, legal disclaimer, and `/api/live.js` live-data endpoint unchanged.
+- Added a fourth dashboard metric: **TXN — All Chain Transactions**.
+- Added live Ethereum + Base CHI transfer loading from public indexers.
+- Updated the activity section to show CHI flowing **in** and **out** of a pasted wallet address.
+- Added a wallet-focus input, flow filter, and Clear button.
+- Added table columns: Time, Chain, Flow, From, To, Amount (CHI), TXN.
+- Kept the favicon/browser-tab Chili image from V5.
 
 ## Upload to GitHub
 
-Upload everything inside this replacement folder to the repository root, including the `api` folder and the `assets` folder. GitHub will update the changed files and add the favicon files.
-
-Commit message suggestion:
+Upload everything inside this replacement folder to the existing `chili-coin-live-tracker` GitHub repository:
 
 ```text
-Add Chili browser tab icon and remove floating badge
+index.html
+styles.css
+app.js
+api
+assets
+README.md
+SOURCE_NOTES.md
 ```
+
+Commit directly to `main`. Vercel should automatically redeploy.
+
+## Note about the TXN number
+
+The TXN card shows the latest indexed transfer-event count loaded from the public Ethereum and Base indexers during the live refresh. It is not a verified all-time transaction count.

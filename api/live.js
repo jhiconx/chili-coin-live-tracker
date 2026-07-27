@@ -2,6 +2,7 @@ const ETH_TOKEN = '0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA';
 const BASE_TOKEN = '0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const ETHERSCAN_URL = `https://etherscan.io/token/${ETH_TOKEN}`;
+const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
 const TIMEOUT_MS = 12_000;
 
@@ -17,7 +18,7 @@ async function fetchWithTimeout(url, options = {}) {
         'accept-language': 'en-US,en;q=0.9',
         'cache-control': 'no-cache',
         pragma: 'no-cache',
-        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/3.0)',
+        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/6.0)',
         ...(options.headers || {})
       }
     });
@@ -121,12 +122,13 @@ function decimalAmount(rawValue, rawDecimals) {
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
-function normalizeTransfer(item) {
+function normalizeTransfer(item, chain) {
+  const token = chain.token.toLowerCase();
   const from = String(item.from || '').toLowerCase();
   const to = String(item.to || '').toLowerCase();
   const transactionHash = String(item.hash || item.transactionHash || '').toLowerCase();
-  const contractAddress = String(item.contractAddress || BASE_TOKEN).toLowerCase();
-  if (contractAddress !== BASE_TOKEN.toLowerCase()) return null;
+  const contractAddress = String(item.contractAddress || chain.token).toLowerCase();
+  if (contractAddress !== token) return null;
   if (!transactionHash || !from || !to) return null;
 
   let event = 'Transfer';
@@ -134,11 +136,16 @@ function normalizeTransfer(item) {
   else if (to === ZERO_ADDRESS) event = 'Burn';
 
   return {
+    chain: chain.label,
+    chainKey: chain.key,
     transactionHash,
+    transactionUrl: `${chain.txExplorer}/${transactionHash}`,
     blockNumber: String(item.blockNumber || ''),
     timestamp: item.timeStamp ? new Date(Number(item.timeStamp) * 1000).toISOString() : null,
     from,
     to,
+    fromUrl: `${chain.addressExplorer}/${from}`,
+    toUrl: `${chain.addressExplorer}/${to}`,
     event,
     amount: decimalAmount(item.value, item.tokenDecimal),
     amountRaw: String(item.value ?? ''),
@@ -147,18 +154,16 @@ function normalizeTransfer(item) {
   };
 }
 
-async function fetchBaseTransfers() {
-  // Blockscout's account/tokentx endpoint accepts contractaddress by itself,
-  // returning recent ERC-20 transfers for that token across the Base chain.
+async function fetchTokenTransfers(chain, offset = '100') {
   const params = new URLSearchParams({
     module: 'account',
     action: 'tokentx',
-    contractaddress: BASE_TOKEN,
+    contractaddress: chain.token,
     page: '1',
-    offset: '100',
+    offset,
     sort: 'desc'
   });
-  const url = `https://base.blockscout.com/api?${params.toString()}`;
+  const url = `${chain.compatApi}?${params.toString()}`;
   const response = await fetchWithTimeout(url, { headers: { accept: 'application/json' } });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -171,21 +176,28 @@ async function fetchBaseTransfers() {
   const seen = new Set();
   const transfers = [];
   for (const item of result) {
-    const transfer = normalizeTransfer(item);
+    const transfer = normalizeTransfer(item, chain);
     if (!transfer) continue;
-    const key = `${transfer.transactionHash}:${item.logIndex || item.transactionIndex || transfers.length}`;
+    const key = `${transfer.chainKey}:${transfer.transactionHash}:${item.logIndex || item.transactionIndex || transfers.length}`;
     if (seen.has(key)) continue;
     seen.add(key);
     transfers.push(transfer);
-    if (transfers.length >= 50) break;
+    if (transfers.length >= Number(offset)) break;
   }
 
   return {
     transfers,
-    source: 'Base Blockscout ERC-20 indexer',
-    sourceUrl: `https://base.blockscout.com/token/${BASE_TOKEN}?tab=token_transfers`,
-    explorerUrl: BASESCAN_URL
+    source: chain.source,
+    sourceUrl: chain.sourceUrl,
+    explorerUrl: chain.explorerUrl
   };
+}
+
+function sortTransfers(a, b) {
+  const timeA = a.timestamp ? Date.parse(a.timestamp) : 0;
+  const timeB = b.timestamp ? Date.parse(b.timestamp) : 0;
+  if (timeA !== timeB) return timeB - timeA;
+  return Number(b.blockNumber || 0) - Number(a.blockNumber || 0);
 }
 
 export default async function handler(req, res) {
@@ -200,23 +212,51 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   const fetchedAt = new Date().toISOString();
-  const [baseScan, ethInfo, baseInfo, baseTransfers] = await Promise.allSettled([
+  const chainConfigs = {
+    ethereum: {
+      key: 'ethereum',
+      label: 'Ethereum',
+      token: ETH_TOKEN,
+      compatApi: 'https://eth.blockscout.com/api',
+      txExplorer: 'https://etherscan.io/tx',
+      addressExplorer: 'https://etherscan.io/address',
+      source: 'Ethereum Blockscout ERC-20 indexer',
+      sourceUrl: `https://eth.blockscout.com/token/${ETH_TOKEN}?tab=token_transfers`,
+      explorerUrl: ETHERSCAN_TX_URL
+    },
+    base: {
+      key: 'base',
+      label: 'Base',
+      token: BASE_TOKEN,
+      compatApi: 'https://base.blockscout.com/api',
+      txExplorer: 'https://basescan.org/tx',
+      addressExplorer: 'https://basescan.org/address',
+      source: 'Base Blockscout ERC-20 indexer',
+      sourceUrl: `https://base.blockscout.com/token/${BASE_TOKEN}?tab=token_transfers`,
+      explorerUrl: BASESCAN_URL
+    }
+  };
+
+  const [baseScan, ethInfo, baseInfo, ethTransfers, baseTransfers] = await Promise.allSettled([
     fetchBaseScanHolderCount(),
     fetchTokenInfo('https://eth.blockscout.com/api/v2', ETH_TOKEN),
     fetchTokenInfo('https://base.blockscout.com/api/v2', BASE_TOKEN),
-    fetchBaseTransfers()
+    fetchTokenTransfers(chainConfigs.ethereum, '100'),
+    fetchTokenTransfers(chainConfigs.base, '100')
   ]);
 
   const warnings = [];
   const baseScanValue = baseScan.status === 'fulfilled' ? baseScan.value : null;
   const ethValue = ethInfo.status === 'fulfilled' ? ethInfo.value : null;
   const baseInfoValue = baseInfo.status === 'fulfilled' ? baseInfo.value : null;
-  const transferValue = baseTransfers.status === 'fulfilled' ? baseTransfers.value : null;
+  const ethTransferValue = ethTransfers.status === 'fulfilled' ? ethTransfers.value : null;
+  const baseTransferValue = baseTransfers.status === 'fulfilled' ? baseTransfers.value : null;
 
   if (!baseScanValue) warnings.push(`BaseScan holder count unavailable: ${baseScan.reason?.message || 'unknown error'}`);
   if (!ethValue) warnings.push(`Ethereum holder count unavailable: ${ethInfo.reason?.message || 'unknown error'}`);
   if (!baseInfoValue) warnings.push(`Base token metadata unavailable: ${baseInfo.reason?.message || 'unknown error'}`);
-  if (!transferValue) warnings.push(`Base CHI transfer feed unavailable: ${baseTransfers.reason?.message || 'unknown error'}`);
+  if (!ethTransferValue) warnings.push(`Ethereum CHI transfer feed unavailable: ${ethTransfers.reason?.message || 'unknown error'}`);
+  if (!baseTransferValue) warnings.push(`Base CHI transfer feed unavailable: ${baseTransfers.reason?.message || 'unknown error'}`);
 
   let baseHolders = baseScanValue?.count ?? null;
   let baseHolderSource = baseScanValue?.source ?? null;
@@ -234,8 +274,12 @@ export default async function handler(req, res) {
     ? ethHolders + baseHolders
     : null;
 
+  const ethTransferRows = ethTransferValue?.transfers || [];
+  const baseTransferRows = baseTransferValue?.transfers || [];
+  const allTransfers = [...ethTransferRows, ...baseTransferRows].sort(sortTransfers).slice(0, 150);
+
   return res.status(200).json({
-    ok: Boolean(baseHolders !== null || ethHolders !== null || transferValue),
+    ok: Boolean(baseHolders !== null || ethHolders !== null || allTransfers.length),
     fetchedAt,
     refreshSeconds: 20,
     contracts: {
@@ -247,7 +291,12 @@ export default async function handler(req, res) {
       holderSource: ethValue ? 'Ethereum Blockscout' : null,
       holderSourceUrl: `https://eth.blockscout.com/token/${ETH_TOKEN}`,
       explorerUrl: ETHERSCAN_URL,
-      token: ethValue
+      transferExplorerUrl: ETHERSCAN_TX_URL,
+      token: ethValue,
+      transfers: ethTransferRows,
+      transferCount: ethTransferRows.length,
+      transferSource: ethTransferValue?.source || null,
+      transferSourceUrl: ethTransferValue?.sourceUrl || null
     },
     base: {
       holders: baseHolders,
@@ -255,10 +304,27 @@ export default async function handler(req, res) {
       holderSourceUrl: baseHolderSourceUrl,
       explorerUrl: BASESCAN_URL,
       token: baseInfoValue,
-      transfers: transferValue?.transfers || [],
-      transferSource: transferValue?.source || null,
-      transferSourceUrl: transferValue?.sourceUrl || null,
-      transferExplorerUrl: transferValue?.explorerUrl || BASESCAN_URL
+      transfers: baseTransferRows,
+      transferCount: baseTransferRows.length,
+      transferSource: baseTransferValue?.source || null,
+      transferSourceUrl: baseTransferValue?.sourceUrl || null,
+      transferExplorerUrl: BASESCAN_URL
+    },
+    transactions: {
+      latestCount: allTransfers.length,
+      ethereumLatestCount: ethTransferRows.length,
+      baseLatestCount: baseTransferRows.length,
+      label: 'All Chain Transactions',
+      note: 'This is the latest indexed transfer-event count loaded from public ETH and Base indexers, not a verified all-time transaction total.',
+      records: allTransfers,
+      sources: [
+        ethTransferValue?.source || null,
+        baseTransferValue?.source || null
+      ].filter(Boolean),
+      explorerLinks: {
+        ethereum: ETHERSCAN_TX_URL,
+        base: BASESCAN_URL
+      }
     },
     chainTotal,
     chainTotalNote: 'Sum of chain holder totals; it is not a count of unique people or unique cross-chain addresses.',
