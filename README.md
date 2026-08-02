@@ -50,3 +50,11 @@ constructed. V12 removes that invalid reference and passes the CHI token's 18 de
 directly to the Base RPC transfer reader.
 
 Only `api/live.js` must be replaced when upgrading from V11 to V12.
+
+
+## V13 logo and hero layout update
+
+- Replaced the top-left Chili Coin brand image with `assets/chi-mark.png`.
+- Removed the large mascot image from the Live Wallet Tracker hero section.
+- Replaced the Important Data Notice image with the same CHI mark.
+- Expanded the hero copy across the available width.

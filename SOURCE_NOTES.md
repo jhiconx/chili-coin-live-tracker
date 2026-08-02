@@ -73,3 +73,10 @@ browser or the Vercel-to-GitHub connection. V12 fixes the request initialization
 reduces the default public Base RPC lookup to the latest 20,000 blocks in four
 5,000-block requests. A failed RPC request remains isolated by `Promise.allSettled()`,
 allowing the other holder and transfer sources to continue returning data.
+
+
+## V13 visual asset update
+
+The top navigation brand mark and the Important Data Notice now use the supplied
+`assets/chi-mark.png` file. The large hero mascot was intentionally removed from
+the Live Wallet Tracker section; the sidebar mascot remains unchanged.
