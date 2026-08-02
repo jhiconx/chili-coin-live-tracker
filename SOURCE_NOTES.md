@@ -51,3 +51,16 @@ The dashboard displays two different times:
 - `Latest record`: the timestamp on the newest returned CHI transfer.
 
 Those values should not be treated as the same thing. Public explorer indexing can lag the newest block.
+
+
+## V11 Base freshness fix
+
+The latest Base CHI rows are no longer dependent only on the Base Blockscout token index.
+
+The server now:
+- Reads recent CHI `Transfer` event logs directly from Base JSON-RPC.
+- Merges those records with the existing historical Blockscout rows.
+- Uses transaction and block RPC calls to obtain the transaction signer and timestamp.
+- Deduplicates matching RPC and Blockscout records by chain, transaction hash, and log index.
+
+For production reliability, set the Vercel environment variable `BASE_RPC_URL` to a production Base RPC endpoint. If it is not set, the code falls back to `https://mainnet.base.org`, which Base documents as rate limited and not intended for production systems.

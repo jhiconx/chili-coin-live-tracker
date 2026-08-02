@@ -30,3 +30,13 @@ Suggested commit message:
 ```text
 Add Ethereum and Base network notice
 ```
+
+
+## V11 deployment note
+
+Optional but strongly recommended in Vercel:
+
+- Variable: `BASE_RPC_URL`
+- Value: a production Base Mainnet HTTPS RPC endpoint from your RPC provider.
+
+The package falls back to the public Base endpoint when the variable is absent.
