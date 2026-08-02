@@ -40,3 +40,13 @@ Optional but strongly recommended in Vercel:
 - Value: a production Base Mainnet HTTPS RPC endpoint from your RPC provider.
 
 The package falls back to the public Base endpoint when the variable is absent.
+
+
+## V12 HTTP 500 correction
+
+V11 contained a server-side initialization error in `api/live.js`: it referenced the
+`baseInfo` Promise result while the `Promise.allSettled()` request list was still being
+constructed. V12 removes that invalid reference and passes the CHI token's 18 decimals
+directly to the Base RPC transfer reader.
+
+Only `api/live.js` must be replaced when upgrading from V11 to V12.

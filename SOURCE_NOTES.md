@@ -64,3 +64,12 @@ The server now:
 - Deduplicates matching RPC and Blockscout records by chain, transaction hash, and log index.
 
 For production reliability, set the Vercel environment variable `BASE_RPC_URL` to a production Base RPC endpoint. If it is not set, the code falls back to `https://mainnet.base.org`, which Base documents as rate limited and not intended for production systems.
+
+
+## V12 connection correction
+
+The V11 HTTP 500 was caused by a JavaScript temporal-dead-zone error, not by the
+browser or the Vercel-to-GitHub connection. V12 fixes the request initialization and
+reduces the default public Base RPC lookup to the latest 20,000 blocks in four
+5,000-block requests. A failed RPC request remains isolated by `Promise.allSettled()`,
+allowing the other holder and transfer sources to continue returning data.

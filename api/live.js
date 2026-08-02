@@ -10,8 +10,8 @@ const RECORDS_PER_CHAIN_LIMIT = 300;
 const MAX_TRANSFER_PAGES = 12;
 const TRANSFER_EVENT_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
-const BASE_RECENT_BLOCK_WINDOW = Math.max(10_000, Number(process.env.BASE_RECENT_BLOCK_WINDOW || 50_000));
-const BASE_RPC_BLOCK_CHUNK = 10_000;
+const BASE_RECENT_BLOCK_WINDOW = Math.max(5_000, Number(process.env.BASE_RECENT_BLOCK_WINDOW || 20_000));
+const BASE_RPC_BLOCK_CHUNK = 5_000;
 const BASE_RPC_RECORD_LIMIT = 300;
 
 async function fetchWithTimeout(url, options = {}) {
@@ -627,7 +627,7 @@ export default async function handler(req, res) {
     fetchLatestTokenTransfers(chainConfigs.base),
     fetchRecentBaseRpcTransfers(
       chainConfigs.base,
-      Number(baseInfo.status === 'fulfilled' ? baseInfo.value?.decimals : 18) || 18
+      18
     ),
     fetchContractTransactions(chainConfigs.ethereum),
     fetchContractTransactions(chainConfigs.base)
