@@ -64,7 +64,7 @@
         <div class="hero-copy">
           <div class="eyebrow"><span class="live-dot"></span>On-chain Chili intelligence</div>
           <h1>Live Wallet <span>Tracker</span></h1>
-          <p>"Chili is making loyalty work like texting, where every phone number becomes a wallet"  Track the current holder totals for Chili Coin on Ethereum mainnet and Base. Ethereum is labeled as the non-custodial side and Base as the custodial rewards model based on the operating model supplied for this site.</p>
+          <p>Track the current holder totals for Chili Coin on Ethereum mainnet and Base. Ethereum is labeled as the non-custodial side and Base as the custodial rewards model based on the operating model supplied for this site.</p>
           <div class="hero-meta">
             <span id="connectionStatus" class="connection-pill loading">Connecting to live sources…</span>
             <span id="lastUpdated">Not updated yet</span>
@@ -156,7 +156,7 @@
           <div>
             <div class="eyebrow small"><span class="live-dot"></span>All-time indexed CHI transfer count + latest rows</div>
             <h2>CHI Transaction Flow</h2>
-            <p>All-time indexed ERC-20 transfer count for CHI on Ethereum and Base, plus the latest live rows. Paste any wallet address to see CHI flowing <strong>in</strong> and <strong>out</strong> of that wallet. The table now shows the <strong>Source Wallet</strong> that initiated the transaction separately from the ERC-20 <strong>Token From</strong> and <strong>Recipient</strong> fields, so Base reward distributions such as 5 CHI can show the wallet that sent or initiated them.</p>
+            <p>All-time indexed ERC-20 transfer count for CHI on Ethereum and Base, with the latest 20 records shown per page. Paste any wallet address to see CHI flowing <strong>in</strong> and <strong>out</strong> of that wallet. The table now shows the <strong>Source Wallet</strong> that initiated the transaction separately from the ERC-20 <strong>Token From</strong> and <strong>Recipient</strong> fields, so Base reward distributions such as 5 CHI can show the wallet that sent or initiated them.</p>
           </div>
           <button id="activityRefreshButton" class="refresh-button" type="button">↻ Refresh TXN</button>
         </div>
@@ -201,6 +201,7 @@
             </tbody>
           </table>
         </div>
+        <nav id="activityPagination" class="activity-pagination" aria-label="CHI transaction pages"></nav>
         <div class="table-footer">
           <span id="transferSource">Transfer source: connecting…</span>
           <span class="explorer-links">
@@ -215,9 +216,10 @@
         <div class="notice-icon">✓</div>
         <div>
           <h2>Important Data Notice</h2>
+          <p><strong>Ethereum and Base:</strong> Ethereum Mainnet is the Layer 1 blockchain. Base is a separate EVM-compatible Layer 2 that processes transactions independently and settles batches back to Ethereum. Each network has its own transaction history, explorer, CHI contract address, balances and fees; assets move between them through a bridge. Simply: Ethereum is the main network, and Base is a faster, lower-cost network connected to it.</p>
           <p><strong>Custody classification:</strong> “Non-custodial” and “custodial” reflect the Chili Coin operating model supplied for this tracker. A blockchain explorer displays public addresses and transactions but does not independently prove who controls private keys.</p>
           <p><strong>Holder totals:</strong> The combined chain total adds the two chain-level figures. It is not a verified count of unique people or unique wallets because the same person or address may be represented on both chains.</p>
-          <p><strong>Refresh behavior:</strong> The tracker polls public explorer and indexer data every 20 seconds. Explorer indexing may lag the newest blockchain records. The TXN card is designed to show the all-time indexed ERC-20 transfer-event count returned by the public indexers across Ethereum and Base. The table below shows the latest loaded rows and joins them with transaction-signer records when public indexers provide them. Explorer indexing may lag or differ from another explorer’s displayed count.</p>
+          <p><strong>Refresh behavior:</strong> The tracker polls public explorer and indexer data every 20 seconds. Explorer indexing may lag the newest blockchain records. The TXN card shows the indexed CHI transfer-event total across Ethereum and Base, while the table displays the latest loaded records in 20-row pages.</p>
         </div>
         <img src="/assets/chili-ring.webp" alt="Chili Coin circular mark" />
       </section>

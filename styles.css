@@ -584,3 +584,71 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 @media (max-width: 900px) {
   .activity-controls { grid-template-columns: 1fr; }
 }
+
+/* Version 9: 20-row CHI transaction pagination */
+.activity-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0 4px;
+}
+
+.activity-page-button {
+  min-width: 39px;
+  min-height: 39px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 10px;
+  color: #ead8cf;
+  background: rgba(255, 255, 255, .035);
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+
+.activity-page-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 161, 65, .72);
+  background: rgba(255, 117, 26, .10);
+}
+
+.activity-page-button.active {
+  color: #230b05;
+  border-color: #73b783;
+  background: linear-gradient(145deg, #86c996, #4c9560);
+  box-shadow: 0 6px 18px rgba(69, 214, 111, .16);
+}
+
+.activity-page-button.direction {
+  min-width: 116px;
+}
+
+.activity-page-button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.activity-page-ellipsis {
+  min-width: 26px;
+  color: #9f8479;
+  text-align: center;
+  font-weight: 900;
+}
+
+@media (max-width: 620px) {
+  .activity-pagination {
+    justify-content: flex-start;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 5px;
+  }
+
+  .activity-page-button {
+    flex: 0 0 auto;
+  }
+}
+

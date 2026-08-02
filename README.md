@@ -1,10 +1,19 @@
-# Chili Coin Live Wallet Tracker — V8 All-Time TXN Count
+# Chili Coin Live Wallet Tracker — V10 Network Notice
 
-This replacement update keeps the Chili favicon and transaction-flow table, and changes the TXN card so it represents all indexed CHI ERC-20 transfer events returned by the public indexers, not only the small set of latest rows displayed in the table.
+This package preserves the V9 live feed, pagination, filters, visual design and Chili Coin assets.
+
+## Changes
+
+- Adds a concise Ethereum-versus-Base explanation to **Important Data Notice**.
+- States that Ethereum Mainnet is Layer 1 and Base is a separate EVM-compatible Layer 2.
+- Clarifies that each network has separate transactions, explorers, CHI contracts, balances and fees.
+- Keeps the live Blockscout API v2 transaction feed.
+- Keeps 20 transaction records per page with Previous, Next and numbered pagination.
+- Keeps wallet-focus and in/out filters.
 
 ## Upload
 
-Upload everything inside this folder to the root of your GitHub repository:
+Upload everything inside this folder to the root of the GitHub repository:
 
 - `index.html`
 - `styles.css`
@@ -14,10 +23,10 @@ Upload everything inside this folder to the root of your GitHub repository:
 - `README.md`
 - `SOURCE_NOTES.md`
 
-Commit directly to `main`. Vercel should redeploy automatically.
+Commit to `main`. Vercel should redeploy automatically.
 
 Suggested commit message:
 
 ```text
-Show all-time CHI transfer count
+Add Ethereum and Base network notice
 ```

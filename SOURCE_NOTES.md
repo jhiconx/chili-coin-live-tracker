@@ -1,23 +1,53 @@
-# Source Notes — V8
+# Source Notes — V10
 
 ## Contracts
 
 - Ethereum CHI ERC-20: `0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`
 - Base CHI ERC-20: `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
 
-## TXN count behavior
+## Network structure
 
-The TXN metric is designed to count all indexed CHI ERC-20 `Transfer` events returned by the public indexers for both Ethereum and Base, then add them together.
+Ethereum Mainnet is the Layer 1 network. Base is a separate EVM-compatible Layer 2 that executes transactions independently and settles batches back to Ethereum. The two networks have separate transaction histories, explorers, CHI contract addresses, balances and fees. Assets move between them through a bridge.
 
-The transaction table displays the latest loaded rows only. This is intentional so the page stays fast while the TXN card can reflect a larger all-time transfer-event count such as the total shown on BaseScan.
+## Live transfer behavior
+
+The serverless endpoint reads the newest token-transfer records from the Blockscout API v2 endpoint:
+
+- `/api/v2/tokens/{token-address}/transfers`
+
+Blockscout returns keyset pagination data in `next_page_params`. The endpoint follows those page parameters and combines Ethereum and Base records by timestamp.
+
+## TXN total
+
+The TXN metric uses:
+
+- `/api/v2/tokens/{token-address}/counters`
+
+The Ethereum and Base `transfers_count` values are added together. This is separate from the smaller set of rows loaded for the paginated table.
+
+## Table pagination
+
+- 20 records are displayed per page.
+- The table can hold up to the newest 300 combined records returned by the endpoint.
+- Wallet and flow filters are applied before pagination.
+- Filtering resets the table to page 1.
 
 ## Source wallet behavior
 
 Rows attempt to show:
 
-- Source Wallet: the transaction initiator/signer when the indexer provides a matching contract transaction record
-- Token From: the ERC-20 transfer-event `from` address
-- Recipient: the ERC-20 transfer-event `to` address
-- Amount: the actual CHI amount transferred
+- Source Wallet: the transaction initiator/signer when the compatible transaction indexer provides a match.
+- Token From: the ERC-20 transfer-event `from` address.
+- Recipient: the ERC-20 transfer-event `to` address.
+- Amount: the CHI amount in the transfer event.
 
-Explorer totals can differ across BaseScan, Etherscan, and Blockscout because each service indexes and displays data differently.
+When a separate transaction signer cannot be resolved, Source Wallet falls back to Token From.
+
+## Timing
+
+The dashboard displays two different times:
+
+- `Updated`: when the dashboard API response was fetched.
+- `Latest record`: the timestamp on the newest returned CHI transfer.
+
+Those values should not be treated as the same thing. Public explorer indexing can lag the newest block.
