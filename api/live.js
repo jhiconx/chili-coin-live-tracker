@@ -10,9 +10,11 @@ const RECORDS_PER_CHAIN_LIMIT = 300;
 const MAX_TRANSFER_PAGES = 12;
 const TRANSFER_EVENT_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
-const BASE_RECENT_BLOCK_WINDOW = Math.max(5_000, Number(process.env.BASE_RECENT_BLOCK_WINDOW || 20_000));
-const BASE_RPC_BLOCK_CHUNK = 5_000;
-const BASE_RPC_RECORD_LIMIT = 300;
+const BASE_RECENT_BLOCK_WINDOW = Math.max(3_000, Number(process.env.BASE_RECENT_BLOCK_WINDOW || 18_000));
+const BASE_RPC_BLOCK_CHUNK = 1_500;
+const BASE_RPC_RECORD_LIMIT = 120;
+const BASE_RPC_RANGE_CONCURRENCY = 2;
+const BASE_RPC_DETAIL_CONCURRENCY = 4;
 
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
@@ -27,7 +29,7 @@ async function fetchWithTimeout(url, options = {}) {
         'accept-language': 'en-US,en;q=0.9',
         'cache-control': 'no-cache',
         pragma: 'no-cache',
-        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/9.0)',
+        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/14.0)',
         ...(options.headers || {})
       }
     });
@@ -329,6 +331,31 @@ async function rpcBatch(requests) {
   return results;
 }
 
+async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  async function runWorker() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      try {
+        results[index] = await worker(items[index], index);
+      } catch (error) {
+        results[index] = { __error: error };
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(Math.max(1, concurrency), Math.max(1, items.length)) },
+      () => runWorker()
+    )
+  );
+
+  return results;
+}
+
 async function fetchRecentBaseRpcTransfers(chain, decimals = 18) {
   const latestBlockHex = await rpcRequest('eth_blockNumber', []);
   const latestBlock = hexToNumber(latestBlockHex);
@@ -336,26 +363,57 @@ async function fetchRecentBaseRpcTransfers(chain, decimals = 18) {
   if (!latestBlock) throw new Error('Base RPC did not return a valid latest block');
 
   const firstBlock = Math.max(0, latestBlock - BASE_RECENT_BLOCK_WINDOW + 1);
-  const ranges = [];
 
-  for (let fromBlock = firstBlock; fromBlock <= latestBlock; fromBlock += BASE_RPC_BLOCK_CHUNK) {
+  // Newest ranges first. Base docs recommend keeping eth_getLogs ranges below
+  // 2,000 blocks, so this scanner uses 1,500-block chunks.
+  const ranges = [];
+  for (let toBlock = latestBlock; toBlock >= firstBlock; toBlock -= BASE_RPC_BLOCK_CHUNK) {
     ranges.push({
-      fromBlock,
-      toBlock: Math.min(latestBlock, fromBlock + BASE_RPC_BLOCK_CHUNK - 1)
+      fromBlock: Math.max(firstBlock, toBlock - BASE_RPC_BLOCK_CHUNK + 1),
+      toBlock
     });
   }
 
-  const logPages = await Promise.all(
-    ranges.map(range => rpcRequest('eth_getLogs', [{
-      fromBlock: `0x${range.fromBlock.toString(16)}`,
-      toBlock: `0x${range.toBlock.toString(16)}`,
-      address: chain.token,
-      topics: [TRANSFER_EVENT_TOPIC]
-    }]))
+  const logResults = await mapWithConcurrency(
+    ranges,
+    BASE_RPC_RANGE_CONCURRENCY,
+    async range => {
+      const logs = await rpcRequest('eth_getLogs', [{
+        fromBlock: `0x${range.fromBlock.toString(16)}`,
+        toBlock: `0x${range.toBlock.toString(16)}`,
+        address: chain.token,
+        topics: [TRANSFER_EVENT_TOPIC]
+      }]);
+
+      return {
+        range,
+        logs: Array.isArray(logs) ? logs : []
+      };
+    }
   );
 
-  const logs = logPages
-    .flat()
+  const successfulRanges = [];
+  const failedRanges = [];
+
+  for (let i = 0; i < logResults.length; i += 1) {
+    const result = logResults[i];
+    if (result?.__error) {
+      failedRanges.push({
+        range: ranges[i],
+        error: result.__error?.message || String(result.__error)
+      });
+      continue;
+    }
+    successfulRanges.push(result);
+  }
+
+  if (!successfulRanges.length) {
+    const sampleError = failedRanges[0]?.error || 'all Base RPC log ranges failed';
+    throw new Error(sampleError);
+  }
+
+  const logs = successfulRanges
+    .flatMap(result => result.logs)
     .filter(log => log && !log.removed && Array.isArray(log.topics) && log.topics.length >= 3)
     .sort((a, b) => {
       const blockDifference = hexToNumber(b.blockNumber) - hexToNumber(a.blockNumber);
@@ -369,37 +427,59 @@ async function fetchRecentBaseRpcTransfers(chain, decimals = 18) {
       transfers: [],
       latestBlock,
       firstBlock,
+      rangesRequested: ranges.length,
+      rangesSucceeded: successfulRanges.length,
+      rangesFailed: failedRanges.length,
+      failedRangeErrors: failedRanges.slice(0, 3),
       source: 'Base RPC recent Transfer-log feed',
       sourceUrl: BASESCAN_URL
     };
   }
 
   const uniqueBlocks = [...new Set(logs.map(log => log.blockNumber).filter(Boolean))];
-  const uniqueTransactions = [...new Set(logs.map(log => log.transactionHash).filter(Boolean))];
+  const uniqueTransactions = [...new Set(logs.map(log => String(log.transactionHash || '').toLowerCase()).filter(Boolean))];
 
-  const detailRequests = [
-    ...uniqueBlocks.map(blockNumber => ({
-      key: `block:${blockNumber}`,
-      method: 'eth_getBlockByNumber',
-      params: [blockNumber, false]
-    })),
-    ...uniqueTransactions.map(transactionHash => ({
-      key: `tx:${transactionHash.toLowerCase()}`,
-      method: 'eth_getTransactionByHash',
-      params: [transactionHash]
-    }))
-  ];
+  // Detail enrichment is deliberately best-effort. If a timestamp or signer lookup
+  // is rate-limited, the Transfer log still remains in the response instead of the
+  // whole Base feed disappearing.
+  const blockResults = await mapWithConcurrency(
+    uniqueBlocks,
+    BASE_RPC_DETAIL_CONCURRENCY,
+    async blockNumber => ({
+      key: blockNumber,
+      value: await rpcRequest('eth_getBlockByNumber', [blockNumber, false])
+    })
+  );
 
-  const detailResults = await rpcBatch(detailRequests);
+  const txResults = await mapWithConcurrency(
+    uniqueTransactions,
+    BASE_RPC_DETAIL_CONCURRENCY,
+    async transactionHash => ({
+      key: transactionHash,
+      value: await rpcRequest('eth_getTransactionByHash', [transactionHash])
+    })
+  );
+
+  const blocksByNumber = new Map();
+  for (const result of blockResults) {
+    if (result && !result.__error && result.key) blocksByNumber.set(result.key, result.value);
+  }
+
+  const txByHash = new Map();
+  for (const result of txResults) {
+    if (result && !result.__error && result.key) txByHash.set(result.key, result.value);
+  }
+
   const transfers = [];
 
   for (const log of logs) {
     const transactionHash = String(log.transactionHash || '').toLowerCase();
     const from = topicAddress(log.topics[1]);
     const to = topicAddress(log.topics[2]);
-    const block = detailResults.get(`block:${log.blockNumber}`);
-    const transaction = detailResults.get(`tx:${transactionHash}`);
+    const block = blocksByNumber.get(log.blockNumber);
+    const transaction = txByHash.get(transactionHash);
     const timestampSeconds = hexToNumber(block?.timestamp);
+
     const rawValue = /^0x[0-9a-f]+$/i.test(log.data || '')
       ? BigInt(log.data).toString()
       : '0';
@@ -407,6 +487,8 @@ async function fetchRecentBaseRpcTransfers(chain, decimals = 18) {
     let event = 'Transfer';
     if (from === ZERO_ADDRESS) event = 'Mint';
     else if (to === ZERO_ADDRESS) event = 'Burn';
+
+    const initiator = extractAddress(transaction?.from) || from;
 
     transfers.push({
       chain: chain.label,
@@ -426,8 +508,8 @@ async function fetchRecentBaseRpcTransfers(chain, decimals = 18) {
       amountRaw: rawValue,
       decimals,
       tokenSymbol: 'CHI',
-      sourceWallet: extractAddress(transaction?.from) || from,
-      sourceWalletUrl: `${chain.addressExplorer}/${extractAddress(transaction?.from) || from}`,
+      sourceWallet: initiator,
+      sourceWalletUrl: `${chain.addressExplorer}/${initiator}`,
       transactionInitiator: extractAddress(transaction?.from) || null,
       calledContract: extractAddress(transaction?.to) || null,
       transactionLevelTimestamp: timestampSeconds ? new Date(timestampSeconds * 1000).toISOString() : null
@@ -438,6 +520,11 @@ async function fetchRecentBaseRpcTransfers(chain, decimals = 18) {
     transfers,
     latestBlock,
     firstBlock,
+    rangesRequested: ranges.length,
+    rangesSucceeded: successfulRanges.length,
+    rangesFailed: failedRanges.length,
+    failedRangeErrors: failedRanges.slice(0, 3),
+    newestRpcTimestamp: transfers.find(item => item.timestamp)?.timestamp || null,
     source: 'Base RPC recent Transfer-log feed',
     sourceUrl: BASESCAN_URL
   };
@@ -670,6 +757,9 @@ export default async function handler(req, res) {
   if (!baseRpcTransferValue) {
     warnings.push(`Base direct-RPC recent transfer feed unavailable: ${baseRpcTransfers.reason?.message || 'unknown error'}`);
   }
+  if (baseRpcTransferValue?.rangesFailed > 0) {
+    warnings.push(`Base direct-RPC scan was partial: ${baseRpcTransferValue.rangesSucceeded}/${baseRpcTransferValue.rangesRequested} block ranges succeeded.`);
+  }
   if (!ethContractTxValue) {
     warnings.push(`Ethereum source-wallet feed unavailable: ${ethContractTxs.reason?.message || 'unknown error'}`);
   }
@@ -802,7 +892,17 @@ export default async function handler(req, res) {
       explorerLinks: {
         ethereum: ETHERSCAN_TX_URL,
         base: BASESCAN_URL
-      }
+      },
+      baseRpcDiagnostics: baseRpcTransferValue ? {
+        latestBlock: baseRpcTransferValue.latestBlock ?? null,
+        firstBlock: baseRpcTransferValue.firstBlock ?? null,
+        rangesRequested: baseRpcTransferValue.rangesRequested ?? null,
+        rangesSucceeded: baseRpcTransferValue.rangesSucceeded ?? null,
+        rangesFailed: baseRpcTransferValue.rangesFailed ?? null,
+        recentRecords: baseRpcTransferValue.transfers?.length ?? 0,
+        newestTimestamp: baseRpcTransferValue.newestRpcTimestamp ?? null,
+        usingCustomRpc: Boolean(process.env.BASE_RPC_URL)
+      } : null
     },
     chainTotal,
     chainTotalNote: 'Sum of chain holder totals; it is not a count of unique people or unique cross-chain addresses.',

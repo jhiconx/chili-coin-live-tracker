@@ -80,3 +80,10 @@ allowing the other holder and transfer sources to continue returning data.
 The top navigation brand mark and the Important Data Notice now use the supplied
 `assets/chi-mark.png` file. The large hero mascot was intentionally removed from
 the Live Wallet Tracker section; the sidebar mascot remains unchanged.
+
+
+## V14 Base RPC reliability
+
+Base's official `eth_getLogs` documentation recommends block ranges under 2,000
+blocks for reliable queries. V14 uses 1,500-block ranges instead of the previous
+5,000-block ranges. The public Base RPC remains a fallback only and may be rate-limited.

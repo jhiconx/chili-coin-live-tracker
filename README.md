@@ -58,3 +58,19 @@ Only `api/live.js` must be replaced when upgrading from V11 to V12.
 - Removed the large mascot image from the Live Wallet Tracker hero section.
 - Replaced the Important Data Notice image with the same CHI mark.
 - Expanded the hero copy across the available width.
+
+
+## V14 Base transaction freshness
+
+V14 changes the direct Base RPC scanner to 1,500-block `eth_getLogs` ranges and
+processes them in small concurrent groups. This follows Base's guidance to keep
+log filters under 2,000 blocks for reliable results.
+
+The Base RPC overlay is now fault tolerant:
+- A failed block range no longer removes all Base records.
+- Block timestamp and transaction-signer enrichment are best-effort.
+- Recent Base Transfer logs remain visible even if enrichment requests are rate-limited.
+- `/api/live` now returns `transactions.baseRpcDiagnostics` for troubleshooting.
+
+For production, set `BASE_RPC_URL` in Vercel to a dedicated Base Mainnet HTTPS RPC
+endpoint. The built-in `https://mainnet.base.org` fallback is rate-limited.
