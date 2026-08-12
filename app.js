@@ -9,9 +9,7 @@ const state = {
   timer: null,
   feedbackTimer: null,
   focusWallet: '',
-  direction: 'all',
-  activityPage: 1,
-  activityPageSize: 20
+  direction: 'all'
 };
 
 const elements = {
@@ -30,7 +28,6 @@ const elements = {
   activityRows: document.querySelector('#activityRows'),
   activityStatus: document.querySelector('#activityStatus'),
   activityUpdated: document.querySelector('#activityUpdated'),
-  activityPagination: document.querySelector('#activityPagination'),
   transferSource: document.querySelector('#transferSource'),
   baseTransactionsLink: document.querySelector('#baseTransactionsLink'),
   ethTransactionsLink: document.querySelector('#ethTransactionsLink'),
@@ -202,141 +199,25 @@ function filteredTransfers(data) {
   return rows;
 }
 
-function paginationItems(currentPage, totalPages) {
-  if (totalPages <= 8) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
-  }
-
-  const pages = new Set([
-    1,
-    2,
-    currentPage - 1,
-    currentPage,
-    currentPage + 1,
-    totalPages - 1,
-    totalPages
-  ]);
-
-  return [...pages]
-    .filter(page => page >= 1 && page <= totalPages)
-    .sort((a, b) => a - b);
-}
-
-function renderActivityPagination(totalRows) {
-  if (!elements.activityPagination) return;
-
-  const pageSize = state.activityPageSize;
-  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  state.activityPage = Math.min(Math.max(1, state.activityPage), totalPages);
-
-  const pages = paginationItems(state.activityPage, totalPages);
-  const parts = [
-    `<button class="activity-page-button direction" type="button" data-page="${state.activityPage - 1}" ${state.activityPage === 1 ? 'disabled' : ''}>← Previous</button>`
-  ];
-
-  let priorPage = 0;
-
-  for (const page of pages) {
-    if (priorPage && page - priorPage > 1) {
-      parts.push('<span class="activity-page-ellipsis" aria-hidden="true">…</span>');
-    }
-
-    parts.push(
-      `<button class="activity-page-button ${page === state.activityPage ? 'active' : ''}" type="button" data-page="${page}" aria-label="Transaction page ${page}" ${page === state.activityPage ? 'aria-current="page"' : ''}>${page}</button>`
-    );
-
-    priorPage = page;
-  }
-
-  parts.push(
-    `<button class="activity-page-button direction" type="button" data-page="${state.activityPage + 1}" ${state.activityPage === totalPages ? 'disabled' : ''}>Next →</button>`
-  );
-
-  elements.activityPagination.innerHTML = parts.join('');
-
-  elements.activityPagination
-    .querySelectorAll('button[data-page]')
-    .forEach(button => {
-      button.addEventListener('click', () => {
-        const requestedPage = Number(button.dataset.page);
-        if (!Number.isInteger(requestedPage)) return;
-
-        state.activityPage = Math.min(Math.max(1, requestedPage), totalPages);
-        renderActivity(state.data);
-
-        document.querySelector('#activity')?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        });
-      });
-    });
-}
-
 function renderActivity(data) {
   if (!elements.activityRows) return;
-
   const transfers = filteredTransfers(data);
   const totalLoaded = allTransferRecords(data).length;
   const fetched = normalizeTimestamp(data.fetchedAt);
-  const latestOnChain = normalizeTimestamp(
-    data.transactions?.latestOnChainAt
-      || data.latestOnChainAt
-      || allTransferRecords(data)[0]?.timestamp
-  );
-
-  const ethCount = data.transactions?.ethereumTotalCount
-    ?? data.ethereum?.transferCount
-    ?? data.transactions?.ethereumLatestCount
-    ?? 0;
-
-  const baseCount = data.transactions?.baseTotalCount
-    ?? data.base?.transferCount
-    ?? data.transactions?.baseLatestCount
-    ?? 0;
-
+  const ethCount = data.transactions?.ethereumTotalCount ?? data.ethereum?.transferCount ?? data.transactions?.ethereumLatestCount ?? 0;
+  const baseCount = data.transactions?.baseTotalCount ?? data.base?.transferCount ?? data.transactions?.baseLatestCount ?? 0;
   const focusWallet = normalizeAddress(state.focusWallet);
 
-  elements.transferSource.textContent =
-    `Transfer source: ETH ${formatNumber(ethCount)} + Base ${formatNumber(baseCount)} all-time indexed transfers`;
-
-  if (elements.baseTransactionsLink) {
-    elements.baseTransactionsLink.href =
-      data.transactions?.explorerLinks?.base || BASESCAN_TX_URL;
-  }
-
-  if (elements.ethTransactionsLink) {
-    elements.ethTransactionsLink.href =
-      data.transactions?.explorerLinks?.ethereum || ETHERSCAN_TX_URL;
-  }
-
-  const fetchedText = fetched
-    ? `Updated ${fetched.toLocaleTimeString([], {
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit'
-    })}`
+  elements.transferSource.textContent = `Transfer source: ETH ${formatNumber(ethCount)} + Base ${formatNumber(baseCount)} all-time indexed transfers`;
+  if (elements.baseTransactionsLink) elements.baseTransactionsLink.href = data.transactions?.explorerLinks?.base || BASESCAN_TX_URL;
+  if (elements.ethTransactionsLink) elements.ethTransactionsLink.href = data.transactions?.explorerLinks?.ethereum || ETHERSCAN_TX_URL;
+  elements.activityUpdated.textContent = fetched
+    ? `Updated ${fetched.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`
     : 'Update time unavailable';
 
-  const latestText = latestOnChain
-    ? `Latest record ${latestOnChain.toLocaleString([], {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    })}`
-    : 'Latest record unavailable';
-
-  elements.activityUpdated.textContent = `${fetchedText} · ${latestText}`;
-
   if (!totalLoaded) {
-    elements.activityStatus.textContent =
-      'No CHI transaction records were returned by the live sources.';
-
-    elements.activityRows.innerHTML =
-      '<tr><td colspan="8" class="empty-state">No ETH or Base CHI transfers were returned. Use “Refresh TXN” to retry, or open the explorer links below.</td></tr>';
-
-    if (elements.activityPagination) elements.activityPagination.innerHTML = '';
+    elements.activityStatus.textContent = 'No CHI transaction records were returned by the live sources.';
+    elements.activityRows.innerHTML = '<tr><td colspan="7" class="empty-state">No ETH or Base CHI transfers were returned. Use “Refresh TXN” to retry, or open the explorer links below.</td></tr>';
     return;
   }
 
@@ -344,74 +225,33 @@ function renderActivity(data) {
     const message = focusWallet
       ? 'No CHI in/out transfers matched that wallet in the latest loaded records.'
       : 'No CHI transfers matched the selected filter.';
-
     elements.activityStatus.textContent = message;
-    elements.activityRows.innerHTML =
-      `<tr><td colspan="8" class="empty-state">${escapeHtml(message)}</td></tr>`;
-
-    if (elements.activityPagination) elements.activityPagination.innerHTML = '';
+    elements.activityRows.innerHTML = `<tr><td colspan="7" class="empty-state">${escapeHtml(message)}</td></tr>`;
     return;
   }
 
-  const pageSize = state.activityPageSize;
-  const totalPages = Math.max(1, Math.ceil(transfers.length / pageSize));
-  state.activityPage = Math.min(Math.max(1, state.activityPage), totalPages);
-
-  const startIndex = (state.activityPage - 1) * pageSize;
-  const pageTransfers = transfers.slice(startIndex, startIndex + pageSize);
-  const firstShown = startIndex + 1;
-  const lastShown = startIndex + pageTransfers.length;
-
-  const focusText = focusWallet
-    ? ` for ${shortHash(focusWallet, 8, 6)}`
-    : '';
-
-  elements.activityStatus.textContent =
-    `Showing records ${firstShown}–${lastShown} of ${formatNumber(transfers.length)} loaded latest CHI transfers${focusText}. Page ${state.activityPage} of ${totalPages}. The TXN card reflects ${formatNumber(data.transactions?.totalCount ?? totalLoaded)} all-time indexed transfer events.`;
-
-  elements.activityRows.innerHTML = pageTransfers.map(item => {
+  const focusText = focusWallet ? ` for ${shortHash(focusWallet, 8, 6)}` : '';
+  elements.activityStatus.textContent = `Showing ${transfers.length} latest rows of ${formatNumber((data.transactions?.totalCount ?? totalLoaded))} indexed CHI transaction${totalLoaded === 1 ? '' : 's'}${focusText}. Source Wallet is the ERC-20 CHI From wallet; Recipient is the ERC-20 CHI To wallet.`;
+  elements.activityRows.innerHTML = transfers.map(item => {
     const tx = item.transactionHash || '';
     const from = item.from || '';
     const to = item.to || '';
     const flow = flowForTransfer(item, focusWallet);
-
-    const txLink = item.transactionUrl
-      || (item.chainKey === 'ethereum'
-        ? `https://etherscan.io/tx/${tx}`
-        : `https://basescan.org/tx/${tx}`);
-
-    const sourceWallet =
-      item.sourceWallet || item.transactionInitiator || from;
-
-    const sourceLink = item.sourceWalletUrl
-      || (item.chainKey === 'ethereum'
-        ? `https://etherscan.io/address/${sourceWallet}`
-        : `https://basescan.org/address/${sourceWallet}`);
-
-    const fromLink = item.fromUrl
-      || (item.chainKey === 'ethereum'
-        ? `https://etherscan.io/address/${from}`
-        : `https://basescan.org/address/${from}`);
-
-    const toLink = item.toUrl
-      || (item.chainKey === 'ethereum'
-        ? `https://etherscan.io/address/${to}`
-        : `https://basescan.org/address/${to}`);
-
+    const txLink = item.transactionUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/tx/${tx}` : `https://basescan.org/tx/${tx}`);
+    const sourceWallet = item.sourceWallet || from;
+    const sourceLink = item.sourceWalletUrl || item.fromUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/address/${sourceWallet}` : `https://basescan.org/address/${sourceWallet}`);
+    const toLink = item.toUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/address/${to}` : `https://basescan.org/address/${to}`);
     return `
       <tr>
         <td title="${escapeHtml(item.timestamp || '')}">${escapeHtml(relativeTime(item.timestamp))}</td>
         <td><span class="chain-pill ${chainClass(item.chainKey)}">${escapeHtml(item.chain || 'Chain')}</span></td>
         <td><span class="flow-tag ${flowClass(flow)}">${escapeHtml(flow)}</span></td>
         <td><a class="mono-link" href="${sourceLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(sourceWallet)}">${escapeHtml(shortHash(sourceWallet))}</a></td>
-        <td><a class="mono-link" href="${fromLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(from)}">${escapeHtml(shortHash(from))}</a></td>
         <td><a class="mono-link" href="${toLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(to)}">${escapeHtml(shortHash(to))}</a></td>
         <td class="amount-cell">${escapeHtml(formatDecimalString(item.amount))}</td>
         <td><a class="mono-link" href="${txLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(tx)}">${escapeHtml(shortHash(tx, 9, 6))} ↗</a></td>
       </tr>`;
   }).join('');
-
-  renderActivityPagination(transfers.length);
 }
 
 function renderStatus(data) {
@@ -452,9 +292,7 @@ async function loadLiveData({ manual = false } = {}) {
 
     if (!response.ok) throw new Error(`Live endpoint returned HTTP ${response.status}`);
     const data = await response.json();
-    const firstLoad = !state.data;
     state.data = data;
-    if (manual || firstLoad) state.activityPage = 1;
     renderMetrics(data);
     renderActivity(data);
     renderStatus(data);
@@ -464,7 +302,7 @@ async function loadLiveData({ manual = false } = {}) {
     elements.lastUpdated.textContent = error instanceof Error ? error.message : 'Unknown refresh error';
     if (elements.activityStatus) elements.activityStatus.textContent = 'CHI transaction refresh failed.';
     if (!state.data && elements.activityRows) {
-      elements.activityRows.innerHTML = '<tr><td colspan="8" class="empty-state">The live endpoint could not be reached. Vercel will retry on the next automatic refresh.</td></tr>';
+      elements.activityRows.innerHTML = '<tr><td colspan="7" class="empty-state">The live endpoint could not be reached. Vercel will retry on the next automatic refresh.</td></tr>';
     }
     if (manual) setRefreshButton({ error: true });
   } finally {
@@ -485,7 +323,6 @@ function rerenderActivityFromControls() {
   if (!state.data) return;
   state.focusWallet = elements.walletFocusInput?.value || '';
   state.direction = elements.directionFilter?.value || 'all';
-  state.activityPage = 1;
   renderActivity(state.data);
 }
 
@@ -505,7 +342,6 @@ if (elements.clearWalletFilter) {
     if (elements.directionFilter) elements.directionFilter.value = 'all';
     state.focusWallet = '';
     state.direction = 'all';
-    state.activityPage = 1;
     if (state.data) renderActivity(state.data);
   });
 }

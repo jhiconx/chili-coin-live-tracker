@@ -1,35 +1,61 @@
 const ETH_TOKEN = '0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA';
 const BASE_TOKEN = '0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const ETHERSCAN_URL = `https://etherscan.io/token/${ETH_TOKEN}`;
 const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
-const TIMEOUT_MS = 12_000;
+const ETHERSCAN_V2_URL = 'https://api.etherscan.io/v2/api';
+const EXPLORER_API_KEY = process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY || '';
+const TIMEOUT_MS = 14_000;
 const TABLE_RECORD_LIMIT = 300;
-const RECORDS_PER_CHAIN_LIMIT = 300;
-const MAX_TRANSFER_PAGES = 12;
-const TRANSFER_EVENT_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
-const BASE_RECENT_BLOCK_WINDOW = Math.max(3_000, Number(process.env.BASE_RECENT_BLOCK_WINDOW || 18_000));
-const BASE_RPC_BLOCK_CHUNK = 1_500;
-const BASE_RPC_RECORD_LIMIT = 120;
-const BASE_RPC_RANGE_CONCURRENCY = 2;
-const BASE_RPC_DETAIL_CONCURRENCY = 4;
+const BLOCKSCOUT_LATEST_PAGES = 6;
+const BASESCAN_LOG_MAX_PAGES = 10;
+const ETHERSCAN_LOG_MAX_PAGES = 4;
+const LOG_OFFSET = 1000;
+
+const chainConfigs = {
+  ethereum: {
+    key: 'ethereum',
+    label: 'Ethereum',
+    chainId: '1',
+    token: ETH_TOKEN,
+    blockscoutApi: 'https://eth.blockscout.com/api/v2',
+    compatApi: 'https://eth.blockscout.com/api',
+    txExplorer: 'https://etherscan.io/tx',
+    addressExplorer: 'https://etherscan.io/address',
+    holderExplorer: `https://eth.blockscout.com/token/${ETH_TOKEN}`,
+    transferExplorer: ETHERSCAN_TX_URL,
+    sourceName: 'Ethereum Blockscout token indexer'
+  },
+  base: {
+    key: 'base',
+    label: 'Base',
+    chainId: '8453',
+    token: BASE_TOKEN,
+    blockscoutApi: 'https://base.blockscout.com/api/v2',
+    compatApi: 'https://base.blockscout.com/api',
+    txExplorer: 'https://basescan.org/tx',
+    addressExplorer: 'https://basescan.org/address',
+    holderExplorer: `https://base.blockscout.com/token/${BASE_TOKEN}`,
+    transferExplorer: BASESCAN_URL,
+    sourceName: 'Base Blockscout token indexer'
+  }
+};
 
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
   try {
     return await fetch(url, {
       ...options,
       signal: controller.signal,
       headers: {
-        accept: options.accept || '*/*',
+        accept: options.accept || 'application/json, text/plain, */*',
         'accept-language': 'en-US,en;q=0.9',
         'cache-control': 'no-cache',
         pragma: 'no-cache',
-        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/14.0)',
+        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/9.0)',
         ...(options.headers || {})
       }
     });
@@ -57,6 +83,12 @@ function toPlainText(html) {
     .trim();
 }
 
+function asNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(String(value).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
 function parseHolderCount(content) {
   const raw = String(content || '');
   const plain = toPlainText(raw);
@@ -72,41 +104,33 @@ function parseHolderCount(content) {
     for (const pattern of patterns) {
       const match = source.match(pattern);
       if (!match) continue;
-      const count = Number(match[1].replace(/,/g, ''));
+      const count = asNumber(match[1]);
       if (Number.isInteger(count) && count >= 0) return count;
     }
   }
-
   return null;
 }
 
 async function fetchBaseScanHolderCount() {
   const pageUrl = `https://basescan.org/token/${BASE_TOKEN}`;
   const attempts = [
-    { url: pageUrl, source: 'BaseScan' },
-    { url: `https://r.jina.ai/https://basescan.org/token/${BASE_TOKEN}`, source: 'BaseScan via text mirror' }
+    { url: pageUrl, source: 'BaseScan token page' },
+    { url: `https://r.jina.ai/https://basescan.org/token/${BASE_TOKEN}`, source: 'BaseScan token page via text mirror' }
   ];
 
   const failures = [];
-
   for (const attempt of attempts) {
     try {
       const response = await fetchWithTimeout(attempt.url, {
         headers: attempt.url.includes('r.jina.ai')
           ? { 'x-no-cache': 'true', 'x-return-format': 'text' }
-          : {}
+          : { accept: 'text/html, text/plain, */*' }
       });
-
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const content = await response.text();
       const count = parseHolderCount(content);
-      if (count === null) throw new Error('holder count was not present in the response');
-
-      return {
-        count,
-        source: attempt.source,
-        sourceUrl: BASESCAN_URL
-      };
+      if (count === null) throw new Error('holder count not present');
+      return { count, source: attempt.source, sourceUrl: BASESCAN_URL };
     } catch (error) {
       failures.push(`${attempt.source}: ${error.message}`);
     }
@@ -115,538 +139,320 @@ async function fetchBaseScanHolderCount() {
   throw new Error(failures.join(' | '));
 }
 
-async function fetchJson(url) {
-  const response = await fetchWithTimeout(url, {
-    headers: { accept: 'application/json' }
-  });
-
+async function fetchBlockscoutCounters(chain) {
+  const response = await fetchWithTimeout(`${chain.blockscoutApi}/tokens/${chain.token}/counters`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
-}
-
-async function fetchTokenInfo(apiRoot, token) {
-  const data = await fetchJson(`${apiRoot}/tokens/${token}`);
-  const count = Number(data.holders_count ?? data.holdersCount ?? data.holder_count);
-
+  const data = await response.json();
   return {
-    count: Number.isFinite(count) ? count : null,
-    name: data.name || null,
-    symbol: data.symbol || null,
-    type: data.type || null,
-    decimals: Number(data.decimals ?? 18)
+    holders: asNumber(data.token_holders_count ?? data.holders_count ?? data.holdersCount),
+    transfers: asNumber(data.transfers_count ?? data.token_transfers_count ?? data.transfer_count),
+    source: `${chain.label} Blockscout token counters`,
+    sourceUrl: `${chain.blockscoutApi}/tokens/${chain.token}/counters`
   };
 }
 
-async function fetchTokenCounters(apiRoot, token) {
-  const data = await fetchJson(`${apiRoot}/tokens/${token}/counters`);
-
-  const holders = Number(data.token_holders_count ?? data.holders_count);
-  const transfers = Number(data.transfers_count ?? data.token_transfers_count);
-
+async function fetchTokenInfo(chain) {
+  const response = await fetchWithTimeout(`${chain.blockscoutApi}/tokens/${chain.token}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
   return {
-    holders: Number.isFinite(holders) ? holders : null,
-    transfers: Number.isFinite(transfers) ? transfers : null
+    count: asNumber(data.holders_count ?? data.holdersCount ?? data.holder_count),
+    name: data.name || null,
+    symbol: data.symbol || null,
+    type: data.type || null,
+    decimals: asNumber(data.decimals) ?? 18
   };
 }
 
 function decimalAmount(rawValue, rawDecimals) {
   const value = String(rawValue ?? '').trim();
   const decimals = Number(rawDecimals ?? 18);
-
-  if (!/^\d+$/.test(value) || !Number.isInteger(decimals) || decimals < 0 || decimals > 255) {
-    return value || null;
-  }
+  if (!/^[0-9]+$/.test(value) || !Number.isInteger(decimals) || decimals < 0 || decimals > 255) return value || null;
 
   const padded = value.padStart(decimals + 1, '0');
   const whole = decimals === 0 ? padded : padded.slice(0, -decimals);
   const fraction = decimals === 0 ? '' : padded.slice(-decimals).replace(/0+$/, '');
-
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
-function extractAddress(value) {
+function getHash(value) {
+  if (!value) return '';
   if (typeof value === 'string') return value.toLowerCase();
-
-  const raw = value?.hash
-    || value?.address_hash?.hash
-    || value?.address_hash
-    || value?.address;
-
-  return typeof raw === 'string' ? raw.toLowerCase() : '';
+  return String(value.hash || value.address_hash || value.address || '').toLowerCase();
 }
 
-function normalizeV2Transfer(item, chain) {
-  const tokenAddress = extractAddress(item.token?.address_hash || item.token?.address)
-    || chain.token.toLowerCase();
-
-  if (tokenAddress !== chain.token.toLowerCase()) return null;
-
-  const from = extractAddress(item.from);
-  const to = extractAddress(item.to);
-  const transactionHash = String(item.transaction_hash || item.hash || '').toLowerCase();
-
+function normalizeBlockscoutTransfer(item, chain) {
+  const from = getHash(item.from);
+  const to = getHash(item.to);
+  const transactionHash = String(item.transaction_hash || item.transactionHash || item.hash || '').toLowerCase();
   if (!transactionHash || !from || !to) return null;
 
-  const rawValue = item.total?.value ?? item.value ?? '';
-  const decimals = Number(item.total?.decimals ?? item.token?.decimals ?? 18);
+  const tokenHash = String(item.token?.address_hash || item.token?.address || chain.token).toLowerCase();
+  if (tokenHash && tokenHash !== chain.token.toLowerCase()) return null;
 
   let event = 'Transfer';
   if (from === ZERO_ADDRESS) event = 'Mint';
   else if (to === ZERO_ADDRESS) event = 'Burn';
+
+  const decimals = asNumber(item.total?.decimals ?? item.token?.decimals) ?? 18;
+  const value = item.total?.value ?? item.value ?? item.amount;
+  const logIndex = item.log_index ?? item.logIndex ?? item.index ?? '';
 
   return {
     chain: chain.label,
     chainKey: chain.key,
     transactionHash,
     transactionUrl: `${chain.txExplorer}/${transactionHash}`,
-    blockNumber: String(item.block_number ?? item.blockNumber ?? ''),
-    logIndex: String(item.log_index ?? item.index ?? ''),
+    blockNumber: String(item.block_number || item.blockNumber || ''),
     timestamp: item.timestamp || null,
     from,
     to,
     fromUrl: `${chain.addressExplorer}/${from}`,
     toUrl: `${chain.addressExplorer}/${to}`,
     event,
-    method: item.method || null,
-    amount: decimalAmount(rawValue, decimals),
-    amountRaw: String(rawValue),
+    amount: decimalAmount(value, decimals),
+    amountRaw: String(value ?? ''),
     decimals,
-    tokenSymbol: item.token?.symbol || 'CHI'
+    tokenSymbol: item.token?.symbol || 'CHI',
+    sourceWallet: from,
+    sourceWalletUrl: `${chain.addressExplorer}/${from}`,
+    transactionInitiator: null,
+    calledContract: chain.token.toLowerCase(),
+    methodId: null,
+    functionName: item.method || null,
+    logIndex: String(logIndex),
+    sourceKind: 'erc20-transfer-event',
+    sourceName: `${chain.label} Blockscout token transfers`
   };
 }
 
-async function fetchLatestTokenTransfers(chain, recordLimit = RECORDS_PER_CHAIN_LIMIT) {
+async function fetchBlockscoutTokenTransfers(chain, pages = BLOCKSCOUT_LATEST_PAGES) {
+  let url = `${chain.blockscoutApi}/tokens/${chain.token}/transfers`;
   const transfers = [];
   const seen = new Set();
-  let nextPageParams = null;
+  let nextPage = null;
   let pageCount = 0;
 
-  do {
-    const url = new URL(`${chain.apiV2}/tokens/${chain.token}/transfers`);
+  while (url && pageCount < pages && transfers.length < TABLE_RECORD_LIMIT) {
+    pageCount += 1;
+    const response = await fetchWithTimeout(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const items = Array.isArray(data.items) ? data.items : [];
 
-    if (nextPageParams) {
-      for (const [key, value] of Object.entries(nextPageParams)) {
-        if (value !== null && value !== undefined) {
-          url.searchParams.set(key, String(value));
-        }
-      }
-    }
-
-    const data = await fetchJson(url.toString());
-
-    if (!Array.isArray(data.items)) {
-      throw new Error('Unexpected Blockscout v2 transfer response');
-    }
-
-    for (const item of data.items) {
-      const transfer = normalizeV2Transfer(item, chain);
+    for (const item of items) {
+      const transfer = normalizeBlockscoutTransfer(item, chain);
       if (!transfer) continue;
-
-      const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex}`;
+      const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfers.length}`;
       if (seen.has(key)) continue;
-
       seen.add(key);
       transfers.push(transfer);
-
-      if (transfers.length >= recordLimit) break;
+      if (transfers.length >= TABLE_RECORD_LIMIT) break;
     }
 
-    nextPageParams = data.next_page_params || null;
-    pageCount += 1;
-  } while (
-    nextPageParams
-    && transfers.length < recordLimit
-    && pageCount < MAX_TRANSFER_PAGES
-  );
-
-  return {
-    transfers,
-    fetchedCount: transfers.length,
-    pagesFetched: pageCount,
-    source: `${chain.label} Blockscout v2 token-transfer feed`,
-    sourceUrl: chain.sourceUrl,
-    explorerUrl: chain.explorerUrl
-  };
-}
-
-
-function hexToNumber(value) {
-  if (typeof value !== 'string' || !/^0x[0-9a-f]+$/i.test(value)) return 0;
-  return Number.parseInt(value, 16);
-}
-
-function topicAddress(topic) {
-  if (typeof topic !== 'string' || topic.length < 42) return '';
-  return `0x${topic.slice(-40)}`.toLowerCase();
-}
-
-async function rpcRequest(method, params) {
-  const response = await fetchWithTimeout(BASE_RPC_URL, {
-    method: 'POST',
-    headers: { accept: 'application/json', 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: `${method}-${Date.now()}-${Math.random()}`,
-      method,
-      params
-    })
-  });
-
-  if (!response.ok) throw new Error(`Base RPC HTTP ${response.status}`);
-
-  const data = await response.json();
-  if (data.error) throw new Error(data.error.message || 'Base RPC error');
-  return data.result;
-}
-
-async function rpcBatch(requests) {
-  if (!requests.length) return new Map();
-
-  const payload = requests.map((request, index) => ({
-    jsonrpc: '2.0',
-    id: index + 1,
-    method: request.method,
-    params: request.params
-  }));
-
-  const response = await fetchWithTimeout(BASE_RPC_URL, {
-    method: 'POST',
-    headers: { accept: 'application/json', 'content-type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) throw new Error(`Base RPC batch HTTP ${response.status}`);
-
-  const data = await response.json();
-  if (!Array.isArray(data)) throw new Error('Unexpected Base RPC batch response');
-
-  const byId = new Map(data.map(item => [item.id, item]));
-  const results = new Map();
-
-  requests.forEach((request, index) => {
-    const item = byId.get(index + 1);
-    results.set(request.key, item && !item.error ? item.result : null);
-  });
-
-  return results;
-}
-
-async function mapWithConcurrency(items, concurrency, worker) {
-  const results = new Array(items.length);
-  let cursor = 0;
-
-  async function runWorker() {
-    while (cursor < items.length) {
-      const index = cursor++;
-      try {
-        results[index] = await worker(items[index], index);
-      } catch (error) {
-        results[index] = { __error: error };
-      }
+    nextPage = data.next_page_params || null;
+    if (!nextPage || typeof nextPage !== 'object' || !Object.keys(nextPage).length) break;
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(nextPage)) {
+      if (value !== null && value !== undefined) params.set(key, String(value));
     }
-  }
-
-  await Promise.all(
-    Array.from(
-      { length: Math.min(Math.max(1, concurrency), Math.max(1, items.length)) },
-      () => runWorker()
-    )
-  );
-
-  return results;
-}
-
-async function fetchRecentBaseRpcTransfers(chain, decimals = 18) {
-  const latestBlockHex = await rpcRequest('eth_blockNumber', []);
-  const latestBlock = hexToNumber(latestBlockHex);
-
-  if (!latestBlock) throw new Error('Base RPC did not return a valid latest block');
-
-  const firstBlock = Math.max(0, latestBlock - BASE_RECENT_BLOCK_WINDOW + 1);
-
-  // Newest ranges first. Base docs recommend keeping eth_getLogs ranges below
-  // 2,000 blocks, so this scanner uses 1,500-block chunks.
-  const ranges = [];
-  for (let toBlock = latestBlock; toBlock >= firstBlock; toBlock -= BASE_RPC_BLOCK_CHUNK) {
-    ranges.push({
-      fromBlock: Math.max(firstBlock, toBlock - BASE_RPC_BLOCK_CHUNK + 1),
-      toBlock
-    });
-  }
-
-  const logResults = await mapWithConcurrency(
-    ranges,
-    BASE_RPC_RANGE_CONCURRENCY,
-    async range => {
-      const logs = await rpcRequest('eth_getLogs', [{
-        fromBlock: `0x${range.fromBlock.toString(16)}`,
-        toBlock: `0x${range.toBlock.toString(16)}`,
-        address: chain.token,
-        topics: [TRANSFER_EVENT_TOPIC]
-      }]);
-
-      return {
-        range,
-        logs: Array.isArray(logs) ? logs : []
-      };
-    }
-  );
-
-  const successfulRanges = [];
-  const failedRanges = [];
-
-  for (let i = 0; i < logResults.length; i += 1) {
-    const result = logResults[i];
-    if (result?.__error) {
-      failedRanges.push({
-        range: ranges[i],
-        error: result.__error?.message || String(result.__error)
-      });
-      continue;
-    }
-    successfulRanges.push(result);
-  }
-
-  if (!successfulRanges.length) {
-    const sampleError = failedRanges[0]?.error || 'all Base RPC log ranges failed';
-    throw new Error(sampleError);
-  }
-
-  const logs = successfulRanges
-    .flatMap(result => result.logs)
-    .filter(log => log && !log.removed && Array.isArray(log.topics) && log.topics.length >= 3)
-    .sort((a, b) => {
-      const blockDifference = hexToNumber(b.blockNumber) - hexToNumber(a.blockNumber);
-      if (blockDifference !== 0) return blockDifference;
-      return hexToNumber(b.logIndex) - hexToNumber(a.logIndex);
-    })
-    .slice(0, BASE_RPC_RECORD_LIMIT);
-
-  if (!logs.length) {
-    return {
-      transfers: [],
-      latestBlock,
-      firstBlock,
-      rangesRequested: ranges.length,
-      rangesSucceeded: successfulRanges.length,
-      rangesFailed: failedRanges.length,
-      failedRangeErrors: failedRanges.slice(0, 3),
-      source: 'Base RPC recent Transfer-log feed',
-      sourceUrl: BASESCAN_URL
-    };
-  }
-
-  const uniqueBlocks = [...new Set(logs.map(log => log.blockNumber).filter(Boolean))];
-  const uniqueTransactions = [...new Set(logs.map(log => String(log.transactionHash || '').toLowerCase()).filter(Boolean))];
-
-  // Detail enrichment is deliberately best-effort. If a timestamp or signer lookup
-  // is rate-limited, the Transfer log still remains in the response instead of the
-  // whole Base feed disappearing.
-  const blockResults = await mapWithConcurrency(
-    uniqueBlocks,
-    BASE_RPC_DETAIL_CONCURRENCY,
-    async blockNumber => ({
-      key: blockNumber,
-      value: await rpcRequest('eth_getBlockByNumber', [blockNumber, false])
-    })
-  );
-
-  const txResults = await mapWithConcurrency(
-    uniqueTransactions,
-    BASE_RPC_DETAIL_CONCURRENCY,
-    async transactionHash => ({
-      key: transactionHash,
-      value: await rpcRequest('eth_getTransactionByHash', [transactionHash])
-    })
-  );
-
-  const blocksByNumber = new Map();
-  for (const result of blockResults) {
-    if (result && !result.__error && result.key) blocksByNumber.set(result.key, result.value);
-  }
-
-  const txByHash = new Map();
-  for (const result of txResults) {
-    if (result && !result.__error && result.key) txByHash.set(result.key, result.value);
-  }
-
-  const transfers = [];
-
-  for (const log of logs) {
-    const transactionHash = String(log.transactionHash || '').toLowerCase();
-    const from = topicAddress(log.topics[1]);
-    const to = topicAddress(log.topics[2]);
-    const block = blocksByNumber.get(log.blockNumber);
-    const transaction = txByHash.get(transactionHash);
-    const timestampSeconds = hexToNumber(block?.timestamp);
-
-    const rawValue = /^0x[0-9a-f]+$/i.test(log.data || '')
-      ? BigInt(log.data).toString()
-      : '0';
-
-    let event = 'Transfer';
-    if (from === ZERO_ADDRESS) event = 'Mint';
-    else if (to === ZERO_ADDRESS) event = 'Burn';
-
-    const initiator = extractAddress(transaction?.from) || from;
-
-    transfers.push({
-      chain: chain.label,
-      chainKey: chain.key,
-      transactionHash,
-      transactionUrl: `${chain.txExplorer}/${transactionHash}`,
-      blockNumber: String(hexToNumber(log.blockNumber)),
-      logIndex: String(hexToNumber(log.logIndex)),
-      timestamp: timestampSeconds ? new Date(timestampSeconds * 1000).toISOString() : null,
-      from,
-      to,
-      fromUrl: `${chain.addressExplorer}/${from}`,
-      toUrl: `${chain.addressExplorer}/${to}`,
-      event,
-      method: null,
-      amount: decimalAmount(rawValue, decimals),
-      amountRaw: rawValue,
-      decimals,
-      tokenSymbol: 'CHI',
-      sourceWallet: initiator,
-      sourceWalletUrl: `${chain.addressExplorer}/${initiator}`,
-      transactionInitiator: extractAddress(transaction?.from) || null,
-      calledContract: extractAddress(transaction?.to) || null,
-      transactionLevelTimestamp: timestampSeconds ? new Date(timestampSeconds * 1000).toISOString() : null
-    });
+    url = `${chain.blockscoutApi}/tokens/${chain.token}/transfers?${params.toString()}`;
   }
 
   return {
     transfers,
-    latestBlock,
-    firstBlock,
-    rangesRequested: ranges.length,
-    rangesSucceeded: successfulRanges.length,
-    rangesFailed: failedRanges.length,
-    failedRangeErrors: failedRanges.slice(0, 3),
-    newestRpcTimestamp: transfers.find(item => item.timestamp)?.timestamp || null,
-    source: 'Base RPC recent Transfer-log feed',
-    sourceUrl: BASESCAN_URL
+    totalCount: null,
+    visibleTransferCount: transfers.length,
+    source: `${chain.label} Blockscout token transfers`,
+    sourceUrl: `${chain.blockscoutApi}/tokens/${chain.token}/transfers`,
+    capped: Boolean(nextPage)
   };
 }
 
-function mergeTransfers(...groups) {
-  const byId = new Map();
-
-  for (const group of groups) {
-    for (const transfer of group || []) {
-      const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex}`;
-      const existing = byId.get(key);
-
-      if (!existing) {
-        byId.set(key, transfer);
-        continue;
-      }
-
-      byId.set(key, {
-        ...existing,
-        ...transfer,
-        timestamp: transfer.timestamp || existing.timestamp,
-        sourceWallet: transfer.sourceWallet || existing.sourceWallet,
-        sourceWalletUrl: transfer.sourceWalletUrl || existing.sourceWalletUrl,
-        transactionInitiator: transfer.transactionInitiator || existing.transactionInitiator
-      });
-    }
-  }
-
-  return [...byId.values()].sort(sortTransfers);
+function hexToDecimalString(hex) {
+  const clean = String(hex || '0x0').toLowerCase().replace(/^0x/, '') || '0';
+  if (!/^[0-9a-f]+$/.test(clean)) return '0';
+  return BigInt(`0x${clean}`).toString(10);
 }
 
-async function fetchContractTransactions(chain, offset = '250') {
-  const params = new URLSearchParams({
-    module: 'account',
-    action: 'txlist',
-    address: chain.token,
-    page: '1',
-    offset,
-    sort: 'desc'
-  });
+function topicToAddress(topic) {
+  const clean = String(topic || '').toLowerCase().replace(/^0x/, '');
+  if (clean.length < 40) return '';
+  return `0x${clean.slice(-40)}`;
+}
 
-  const url = `${chain.compatApi}?${params.toString()}`;
-  const response = await fetchWithTimeout(url, {
-    headers: { accept: 'application/json' }
-  });
+function parseHexTimestamp(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  const seconds = raw.startsWith('0x') ? Number.parseInt(raw, 16) : Number(raw);
+  return Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : null;
+}
 
+function normalizeExplorerLog(item, chain) {
+  const topics = Array.isArray(item.topics) ? item.topics : [];
+  const from = topicToAddress(topics[1]);
+  const to = topicToAddress(topics[2]);
+  const transactionHash = String(item.transactionHash || item.hash || '').toLowerCase();
+  if (!transactionHash || !from || !to) return null;
+
+  let event = 'Transfer';
+  if (from === ZERO_ADDRESS) event = 'Mint';
+  else if (to === ZERO_ADDRESS) event = 'Burn';
+
+  const blockNumber = item.blockNumber ? String(Number.parseInt(String(item.blockNumber), 16)) : '';
+  const logIndex = item.logIndex ? String(Number.parseInt(String(item.logIndex), 16)) : '';
+  const rawValue = hexToDecimalString(item.data);
+  return {
+    chain: chain.label,
+    chainKey: chain.key,
+    transactionHash,
+    transactionUrl: `${chain.txExplorer}/${transactionHash}`,
+    blockNumber,
+    timestamp: parseHexTimestamp(item.timeStamp),
+    from,
+    to,
+    fromUrl: `${chain.addressExplorer}/${from}`,
+    toUrl: `${chain.addressExplorer}/${to}`,
+    event,
+    amount: decimalAmount(rawValue, 18),
+    amountRaw: rawValue,
+    decimals: 18,
+    tokenSymbol: 'CHI',
+    sourceWallet: from,
+    sourceWalletUrl: `${chain.addressExplorer}/${from}`,
+    transactionInitiator: null,
+    calledContract: chain.token.toLowerCase(),
+    methodId: null,
+    functionName: null,
+    logIndex,
+    sourceKind: 'erc20-transfer-log',
+    sourceName: `${chain.label} Etherscan/BaseScan V2 logs`
+  };
+}
+
+async function etherscanV2Call(params) {
+  if (!EXPLORER_API_KEY) throw new Error('ETHERSCAN_API_KEY is not configured in Vercel');
+  const url = new URL(ETHERSCAN_V2_URL);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
+  url.searchParams.set('apikey', EXPLORER_API_KEY);
+  const response = await fetchWithTimeout(url.toString());
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
   const data = await response.json();
-  const result = Array.isArray(data.result) ? data.result : [];
-
-  if (!result.length && data.status !== '1') {
-    throw new Error(String(data.message || data.result || 'No contract transactions returned'));
+  if (data.status === '0' && !Array.isArray(data.result)) {
+    throw new Error(String(data.result || data.message || 'Etherscan V2 request failed'));
   }
-
-  const byHash = new Map();
-
-  for (const tx of result) {
-    const hash = String(tx.hash || '').toLowerCase();
-    if (!hash) continue;
-
-    byHash.set(hash, {
-      transactionHash: hash,
-      initiator: String(tx.from || '').toLowerCase(),
-      calledContract: String(tx.to || chain.token).toLowerCase(),
-      methodId: tx.methodId || null,
-      functionName: tx.functionName || null,
-      isError: tx.isError === '1',
-      timestamp: tx.timeStamp
-        ? new Date(Number(tx.timeStamp) * 1000).toISOString()
-        : null,
-      blockNumber: String(tx.blockNumber || '')
-    });
-  }
-
-  return {
-    transactions: [...byHash.values()],
-    byHash,
-    source: `${chain.label} Blockscout transaction-signer feed`,
-    sourceUrl: `${chain.sourceUrl}&view=contract_transactions`
-  };
+  return data;
 }
 
-function enrichTransfersWithTransactions(transfers, txInfo) {
-  const txMap = txInfo?.byHash instanceof Map
-    ? txInfo.byHash
-    : new Map();
+async function fetchExplorerTransferLogs(chain, maxPages) {
+  const transfers = [];
+  const seen = new Set();
+  let page = 1;
+  let exhausted = false;
 
-  return transfers.map(transfer => {
-    const tx = txMap.get(String(transfer.transactionHash || '').toLowerCase());
-    const initiator = tx?.initiator || transfer.from || null;
+  while (page <= maxPages) {
+    const data = await etherscanV2Call({
+      chainid: chain.chainId,
+      module: 'logs',
+      action: 'getLogs',
+      fromBlock: '0',
+      toBlock: 'latest',
+      address: chain.token,
+      topic0: TRANSFER_TOPIC,
+      page: String(page),
+      offset: String(LOG_OFFSET)
+    });
 
-    return {
-      ...transfer,
-      sourceWallet: initiator,
-      sourceWalletUrl: initiator
-        ? `${transfer.chainKey === 'ethereum'
-          ? 'https://etherscan.io/address'
-          : 'https://basescan.org/address'}/${initiator}`
-        : null,
-      transactionInitiator: tx?.initiator || null,
-      calledContract: tx?.calledContract || null,
-      methodId: tx?.methodId || null,
-      functionName: tx?.functionName || transfer.method || null,
-      transactionLevelTimestamp: tx?.timestamp || null,
-      timestamp: transfer.timestamp || tx?.timestamp || null,
-      blockNumber: transfer.blockNumber || tx?.blockNumber || ''
-    };
-  });
+    const items = Array.isArray(data.result) ? data.result : [];
+    if (!items.length) {
+      exhausted = true;
+      break;
+    }
+
+    for (const item of items) {
+      const transfer = normalizeExplorerLog(item, chain);
+      if (!transfer) continue;
+      const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfers.length}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      transfers.push(transfer);
+    }
+
+    if (items.length < LOG_OFFSET) {
+      exhausted = true;
+      break;
+    }
+    page += 1;
+  }
+
+  transfers.sort(sortTransfers);
+  return {
+    transfers: transfers.slice(0, TABLE_RECORD_LIMIT),
+    totalCount: transfers.length,
+    visibleTransferCount: Math.min(transfers.length, TABLE_RECORD_LIMIT),
+    source: `${chain.label} ${chain.key === 'base' ? 'BaseScan' : 'Etherscan'} V2 Transfer logs`,
+    sourceUrl: chain.transferExplorer,
+    capped: !exhausted,
+    fetchedPages: page
+  };
 }
 
 function sortTransfers(a, b) {
   const timeA = a.timestamp ? Date.parse(a.timestamp) : 0;
   const timeB = b.timestamp ? Date.parse(b.timestamp) : 0;
-
   if (timeA !== timeB) return timeB - timeA;
-
-  const blockDifference = Number(b.blockNumber || 0) - Number(a.blockNumber || 0);
-  if (blockDifference !== 0) return blockDifference;
-
+  const blockA = Number(a.blockNumber || 0);
+  const blockB = Number(b.blockNumber || 0);
+  if (blockA !== blockB) return blockB - blockA;
   return Number(b.logIndex || 0) - Number(a.logIndex || 0);
+}
+
+async function fetchBestTransferData(chain) {
+  const countersResult = await Promise.allSettled([fetchBlockscoutCounters(chain)]);
+  const counters = countersResult[0].status === 'fulfilled' ? countersResult[0].value : null;
+  const counterError = countersResult[0].status === 'rejected' ? countersResult[0].reason?.message : null;
+
+  if (chain.key === 'base' && EXPLORER_API_KEY) {
+    try {
+      const explorer = await fetchExplorerTransferLogs(chain, BASESCAN_LOG_MAX_PAGES);
+      return {
+        ...explorer,
+        totalCount: explorer.totalCount ?? counters?.transfers ?? explorer.transfers.length,
+        counterCount: counters?.transfers ?? null,
+        counterSource: counters?.source || null,
+        counterSourceUrl: counters?.sourceUrl || null,
+        warnings: [
+          explorer.capped ? `BaseScan log fetch reached ${BASESCAN_LOG_MAX_PAGES} pages; the all-time Base count may be higher.` : null,
+          counterError ? `Base Blockscout counter unavailable: ${counterError}` : null
+        ].filter(Boolean)
+      };
+    } catch (error) {
+      const fallback = await fetchBlockscoutTokenTransfers(chain);
+      return {
+        ...fallback,
+        totalCount: counters?.transfers ?? fallback.transfers.length,
+        counterCount: counters?.transfers ?? null,
+        counterSource: counters?.source || null,
+        counterSourceUrl: counters?.sourceUrl || null,
+        warnings: [`BaseScan V2 exact log source failed, using Blockscout fallback: ${error.message}`]
+      };
+    }
+  }
+
+  const fallback = await fetchBlockscoutTokenTransfers(chain);
+  return {
+    ...fallback,
+    totalCount: counters?.transfers ?? fallback.transfers.length,
+    counterCount: counters?.transfers ?? null,
+    counterSource: counters?.source || null,
+    counterSourceUrl: counters?.sourceUrl || null,
+    warnings: [
+      counterError ? `${chain.label} Blockscout counter unavailable: ${counterError}` : null,
+      chain.key === 'base' && !EXPLORER_API_KEY
+        ? 'BaseScan exact mode is not active because ETHERSCAN_API_KEY is not configured in Vercel. Base rows use Blockscout public token-transfer data and link back to BaseScan.'
+        : null
+    ].filter(Boolean)
+  };
 }
 
 export default async function handler(req, res) {
@@ -657,252 +463,128 @@ export default async function handler(req, res) {
 
   const requestUrl = new URL(req.url || '/', 'https://chili-coin.local');
   const force = requestUrl.searchParams.get('force') === '1';
-
-  res.setHeader(
-    'Cache-Control',
-    force
-      ? 'no-store, max-age=0'
-      : 's-maxage=10, stale-while-revalidate=20'
-  );
+  res.setHeader('Cache-Control', force ? 'no-store, max-age=0' : 's-maxage=8, stale-while-revalidate=12');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   const fetchedAt = new Date().toISOString();
-
-  const chainConfigs = {
-    ethereum: {
-      key: 'ethereum',
-      label: 'Ethereum',
-      token: ETH_TOKEN,
-      apiV2: 'https://eth.blockscout.com/api/v2',
-      compatApi: 'https://eth.blockscout.com/api',
-      txExplorer: 'https://etherscan.io/tx',
-      addressExplorer: 'https://etherscan.io/address',
-      sourceUrl: `https://eth.blockscout.com/token/${ETH_TOKEN}?tab=token_transfers`,
-      explorerUrl: ETHERSCAN_TX_URL
-    },
-    base: {
-      key: 'base',
-      label: 'Base',
-      token: BASE_TOKEN,
-      apiV2: 'https://base.blockscout.com/api/v2',
-      compatApi: 'https://base.blockscout.com/api',
-      txExplorer: 'https://basescan.org/tx',
-      addressExplorer: 'https://basescan.org/address',
-      sourceUrl: `https://base.blockscout.com/token/${BASE_TOKEN}?tab=token_transfers`,
-      explorerUrl: BASESCAN_URL
-    }
-  };
-
-  const [
-    baseScan,
-    ethInfo,
-    baseInfo,
-    ethCounters,
-    baseCounters,
-    ethTransfers,
-    baseTransfers,
-    baseRpcTransfers,
-    ethContractTxs,
-    baseContractTxs
-  ] = await Promise.allSettled([
+  const [baseScanHolder, ethCounters, baseCounters, ethToken, baseToken, ethTransfers, baseTransfers] = await Promise.allSettled([
     fetchBaseScanHolderCount(),
-    fetchTokenInfo(chainConfigs.ethereum.apiV2, ETH_TOKEN),
-    fetchTokenInfo(chainConfigs.base.apiV2, BASE_TOKEN),
-    fetchTokenCounters(chainConfigs.ethereum.apiV2, ETH_TOKEN),
-    fetchTokenCounters(chainConfigs.base.apiV2, BASE_TOKEN),
-    fetchLatestTokenTransfers(chainConfigs.ethereum),
-    fetchLatestTokenTransfers(chainConfigs.base),
-    fetchRecentBaseRpcTransfers(
-      chainConfigs.base,
-      18
-    ),
-    fetchContractTransactions(chainConfigs.ethereum),
-    fetchContractTransactions(chainConfigs.base)
+    fetchBlockscoutCounters(chainConfigs.ethereum),
+    fetchBlockscoutCounters(chainConfigs.base),
+    fetchTokenInfo(chainConfigs.ethereum),
+    fetchTokenInfo(chainConfigs.base),
+    fetchBestTransferData(chainConfigs.ethereum),
+    fetchBestTransferData(chainConfigs.base)
   ]);
 
   const warnings = [];
-
-  const baseScanValue = baseScan.status === 'fulfilled' ? baseScan.value : null;
-  const ethValue = ethInfo.status === 'fulfilled' ? ethInfo.value : null;
-  const baseInfoValue = baseInfo.status === 'fulfilled' ? baseInfo.value : null;
   const ethCounterValue = ethCounters.status === 'fulfilled' ? ethCounters.value : null;
   const baseCounterValue = baseCounters.status === 'fulfilled' ? baseCounters.value : null;
+  const ethTokenValue = ethToken.status === 'fulfilled' ? ethToken.value : null;
+  const baseTokenValue = baseToken.status === 'fulfilled' ? baseToken.value : null;
   const ethTransferValue = ethTransfers.status === 'fulfilled' ? ethTransfers.value : null;
   const baseTransferValue = baseTransfers.status === 'fulfilled' ? baseTransfers.value : null;
-  const baseRpcTransferValue = baseRpcTransfers.status === 'fulfilled' ? baseRpcTransfers.value : null;
-  const ethContractTxValue = ethContractTxs.status === 'fulfilled' ? ethContractTxs.value : null;
-  const baseContractTxValue = baseContractTxs.status === 'fulfilled' ? baseContractTxs.value : null;
 
-  if (!baseScanValue) {
-    warnings.push(`BaseScan holder count unavailable: ${baseScan.reason?.message || 'unknown error'}`);
-  }
-  if (!ethValue && !ethCounterValue) {
-    warnings.push(`Ethereum holder count unavailable: ${ethInfo.reason?.message || ethCounters.reason?.message || 'unknown error'}`);
-  }
-  if (!baseInfoValue && !baseCounterValue) {
-    warnings.push(`Base token metadata unavailable: ${baseInfo.reason?.message || baseCounters.reason?.message || 'unknown error'}`);
-  }
-  if (!ethCounterValue) {
-    warnings.push(`Ethereum all-time transfer counter unavailable: ${ethCounters.reason?.message || 'unknown error'}`);
-  }
-  if (!baseCounterValue) {
-    warnings.push(`Base all-time transfer counter unavailable: ${baseCounters.reason?.message || 'unknown error'}`);
-  }
-  if (!ethTransferValue) {
-    warnings.push(`Ethereum latest CHI transfer feed unavailable: ${ethTransfers.reason?.message || 'unknown error'}`);
-  }
-  if (!baseTransferValue) {
-    warnings.push(`Base Blockscout CHI transfer feed unavailable: ${baseTransfers.reason?.message || 'unknown error'}`);
-  }
-  if (!baseRpcTransferValue) {
-    warnings.push(`Base direct-RPC recent transfer feed unavailable: ${baseRpcTransfers.reason?.message || 'unknown error'}`);
-  }
-  if (baseRpcTransferValue?.rangesFailed > 0) {
-    warnings.push(`Base direct-RPC scan was partial: ${baseRpcTransferValue.rangesSucceeded}/${baseRpcTransferValue.rangesRequested} block ranges succeeded.`);
-  }
-  if (!ethContractTxValue) {
-    warnings.push(`Ethereum source-wallet feed unavailable: ${ethContractTxs.reason?.message || 'unknown error'}`);
-  }
-  if (!baseContractTxValue) {
-    warnings.push(`Base source-wallet feed unavailable: ${baseContractTxs.reason?.message || 'unknown error'}`);
+  if (baseScanHolder.status === 'rejected') warnings.push(`BaseScan holder count unavailable: ${baseScanHolder.reason?.message || 'unknown error'}`);
+  if (ethCounters.status === 'rejected') warnings.push(`Ethereum counter unavailable: ${ethCounters.reason?.message || 'unknown error'}`);
+  if (baseCounters.status === 'rejected') warnings.push(`Base counter unavailable: ${baseCounters.reason?.message || 'unknown error'}`);
+  if (ethToken.status === 'rejected') warnings.push(`Ethereum token metadata unavailable: ${ethToken.reason?.message || 'unknown error'}`);
+  if (baseToken.status === 'rejected') warnings.push(`Base token metadata unavailable: ${baseToken.reason?.message || 'unknown error'}`);
+  if (ethTransfers.status === 'rejected') warnings.push(`Ethereum CHI transfer feed unavailable: ${ethTransfers.reason?.message || 'unknown error'}`);
+  if (baseTransfers.status === 'rejected') warnings.push(`Base CHI transfer feed unavailable: ${baseTransfers.reason?.message || 'unknown error'}`);
+  if (Array.isArray(ethTransferValue?.warnings)) warnings.push(...ethTransferValue.warnings);
+  if (Array.isArray(baseTransferValue?.warnings)) warnings.push(...baseTransferValue.warnings);
+
+  let baseHolders = baseScanHolder.status === 'fulfilled' ? baseScanHolder.value.count : null;
+  let baseHolderSource = baseScanHolder.status === 'fulfilled' ? baseScanHolder.value.source : null;
+  let baseHolderSourceUrl = baseScanHolder.status === 'fulfilled' ? baseScanHolder.value.sourceUrl : BASESCAN_URL;
+
+  if (baseHolders === null && Number.isFinite(baseCounterValue?.holders)) {
+    baseHolders = baseCounterValue.holders;
+    baseHolderSource = 'Base Blockscout token counters fallback';
+    baseHolderSourceUrl = baseCounterValue.sourceUrl;
   }
 
-  let baseHolders = baseScanValue?.count ?? null;
-  let baseHolderSource = baseScanValue?.source ?? null;
-  let baseHolderSourceUrl = baseScanValue?.sourceUrl ?? BASESCAN_URL;
-
-  if (baseHolders === null) {
-    const fallbackBaseHolders = baseCounterValue?.holders ?? baseInfoValue?.count ?? null;
-
-    if (Number.isFinite(fallbackBaseHolders)) {
-      baseHolders = fallbackBaseHolders;
-      baseHolderSource = 'Base Blockscout';
-      baseHolderSourceUrl = `https://base.blockscout.com/token/${BASE_TOKEN}`;
-      warnings.push('The Base holder headline is using Blockscout because BaseScan could not be read.');
-    }
-  }
-
-  const ethHoldersCandidate = ethCounterValue?.holders ?? ethValue?.count ?? null;
-  const ethHolders = Number.isFinite(ethHoldersCandidate)
-    ? ethHoldersCandidate
-    : null;
-
+  const ethHolders = Number.isFinite(ethCounterValue?.holders)
+    ? ethCounterValue.holders
+    : (Number.isFinite(ethTokenValue?.count) ? ethTokenValue.count : null);
   const chainTotal = Number.isFinite(ethHolders) && Number.isFinite(baseHolders)
     ? ethHolders + baseHolders
     : null;
 
-  const ethTransferRows = enrichTransfersWithTransactions(
-    ethTransferValue?.transfers || [],
-    ethContractTxValue
-  );
-
-  const baseBlockscoutRows = enrichTransfersWithTransactions(
-    baseTransferValue?.transfers || [],
-    baseContractTxValue
-  );
-
-  const baseTransferRows = mergeTransfers(
-    baseRpcTransferValue?.transfers || [],
-    baseBlockscoutRows
-  ).slice(0, RECORDS_PER_CHAIN_LIMIT);
-
-  const ethTransferTotal = Number.isFinite(ethCounterValue?.transfers)
-    ? ethCounterValue.transfers
-    : ethTransferRows.length;
-
-  const baseBlockscoutIds = new Set(
-    baseBlockscoutRows.map(item => `${item.chainKey}:${item.transactionHash}:${item.logIndex}`)
-  );
-
-  const baseRpcOnlyCount = (baseRpcTransferValue?.transfers || []).filter(item => (
-    !baseBlockscoutIds.has(`${item.chainKey}:${item.transactionHash}:${item.logIndex}`)
-  )).length;
-
-  const baseTransferTotal = Number.isFinite(baseCounterValue?.transfers)
-    ? baseCounterValue.transfers + baseRpcOnlyCount
-    : baseTransferRows.length;
-
+  const ethTransferRows = Array.isArray(ethTransferValue?.transfers) ? ethTransferValue.transfers : [];
+  const baseTransferRows = Array.isArray(baseTransferValue?.transfers) ? baseTransferValue.transfers : [];
+  const ethTransferTotal = Number.isFinite(ethTransferValue?.totalCount)
+    ? ethTransferValue.totalCount
+    : (Number.isFinite(ethCounterValue?.transfers) ? ethCounterValue.transfers : ethTransferRows.length);
+  const baseTransferTotal = Number.isFinite(baseTransferValue?.totalCount)
+    ? baseTransferValue.totalCount
+    : (Number.isFinite(baseCounterValue?.transfers) ? baseCounterValue.transfers : baseTransferRows.length);
   const allTransferTotal = ethTransferTotal + baseTransferTotal;
-
-  const allTransfers = [...ethTransferRows, ...baseTransferRows]
-    .sort(sortTransfers)
-    .slice(0, TABLE_RECORD_LIMIT);
-
-  const latestOnChainAt = allTransfers.find(item => item.timestamp)?.timestamp || null;
+  const allTransfers = [...ethTransferRows, ...baseTransferRows].sort(sortTransfers).slice(0, TABLE_RECORD_LIMIT);
 
   return res.status(200).json({
     ok: Boolean(baseHolders !== null || ethHolders !== null || allTransfers.length),
     fetchedAt,
-    latestOnChainAt,
     refreshSeconds: 20,
-    tablePageSize: 20,
     contracts: {
       ethereumToken: ETH_TOKEN,
       baseToken: BASE_TOKEN
     },
+    dataMode: {
+      baseScanExactMode: Boolean(EXPLORER_API_KEY && baseTransferValue?.source?.includes('BaseScan')),
+      explorerApiKeyConfigured: Boolean(EXPLORER_API_KEY),
+      note: EXPLORER_API_KEY
+        ? 'Base transfer rows use Etherscan/BaseScan V2 logs when available, with Blockscout as fallback.'
+        : 'BaseScan exact mode is off. Add ETHERSCAN_API_KEY in Vercel to query the official BaseScan/Etherscan V2 log endpoint server-side.'
+    },
     ethereum: {
       holders: ethHolders,
-      holderSource: ethValue || ethCounterValue ? 'Ethereum Blockscout' : null,
-      holderSourceUrl: `https://eth.blockscout.com/token/${ETH_TOKEN}`,
+      holderSource: ethCounterValue ? ethCounterValue.source : (ethTokenValue ? 'Ethereum Blockscout token metadata' : null),
+      holderSourceUrl: ethCounterValue?.sourceUrl || chainConfigs.ethereum.holderExplorer,
       explorerUrl: ETHERSCAN_URL,
       transferExplorerUrl: ETHERSCAN_TX_URL,
-      token: ethValue,
+      token: ethTokenValue,
       transfers: ethTransferRows,
       transferCount: ethTransferTotal,
       visibleTransferCount: ethTransferRows.length,
       transferSource: ethTransferValue?.source || null,
-      transferSourceUrl: ethTransferValue?.sourceUrl || null,
-      signerSource: ethContractTxValue?.source || null,
-      signerSourceUrl: ethContractTxValue?.sourceUrl || null
+      transferSourceUrl: ethTransferValue?.sourceUrl || null
     },
     base: {
       holders: baseHolders,
       holderSource: baseHolderSource,
       holderSourceUrl: baseHolderSourceUrl,
       explorerUrl: BASESCAN_URL,
-      token: baseInfoValue,
+      token: baseTokenValue,
       transfers: baseTransferRows,
       transferCount: baseTransferTotal,
       visibleTransferCount: baseTransferRows.length,
-      transferSource: [baseRpcTransferValue?.source, baseTransferValue?.source].filter(Boolean).join(' + ') || null,
-      transferSourceUrl: baseRpcTransferValue?.sourceUrl || baseTransferValue?.sourceUrl || null,
-      signerSource: baseContractTxValue?.source || null,
-      signerSourceUrl: baseContractTxValue?.sourceUrl || null,
-      transferExplorerUrl: BASESCAN_URL
+      transferSource: baseTransferValue?.source || null,
+      transferSourceUrl: baseTransferValue?.sourceUrl || BASESCAN_URL,
+      transferExplorerUrl: BASESCAN_URL,
+      counterCount: baseTransferValue?.counterCount ?? baseCounterValue?.transfers ?? null
     },
     transactions: {
       totalCount: allTransferTotal,
       latestCount: allTransfers.length,
-      pageSize: 20,
       ethereumTotalCount: ethTransferTotal,
       baseTotalCount: baseTransferTotal,
       ethereumLatestCount: ethTransferRows.length,
       baseLatestCount: baseTransferRows.length,
       label: 'All Chain Transactions',
-      latestOnChainAt,
-      note: 'The table overlays recent Base Transfer logs read directly from Base RPC on top of historical Blockscout rows. This prevents a delayed explorer index from hiding newly confirmed Base CHI transfers. The TXN card uses Blockscout counters plus RPC-only recent records not yet present in the fetched Blockscout window.',
+      note: 'The TXN card counts indexed ERC-20 Transfer events. Base rows prioritize the Transfer event itself: Source Wallet is the CHI From wallet, Recipient is the CHI To wallet, and Amount is decoded from the Transfer event value.',
       records: allTransfers,
       sources: [
         ethTransferValue?.source || null,
-        baseRpcTransferValue?.source || null,
         baseTransferValue?.source || null,
-        ethContractTxValue?.source || null,
-        baseContractTxValue?.source || null
+        ethTransferValue?.counterSource || null,
+        baseTransferValue?.counterSource || null
       ].filter(Boolean),
       explorerLinks: {
         ethereum: ETHERSCAN_TX_URL,
         base: BASESCAN_URL
-      },
-      baseRpcDiagnostics: baseRpcTransferValue ? {
-        latestBlock: baseRpcTransferValue.latestBlock ?? null,
-        firstBlock: baseRpcTransferValue.firstBlock ?? null,
-        rangesRequested: baseRpcTransferValue.rangesRequested ?? null,
-        rangesSucceeded: baseRpcTransferValue.rangesSucceeded ?? null,
-        rangesFailed: baseRpcTransferValue.rangesFailed ?? null,
-        recentRecords: baseRpcTransferValue.transfers?.length ?? 0,
-        newestTimestamp: baseRpcTransferValue.newestRpcTimestamp ?? null,
-        usingCustomRpc: Boolean(process.env.BASE_RPC_URL)
-      } : null
+      }
     },
     chainTotal,
     chainTotalNote: 'Sum of chain holder totals; it is not a count of unique people or unique cross-chain addresses.',

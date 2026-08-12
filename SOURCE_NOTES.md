@@ -1,89 +1,41 @@
-# Source Notes — V10
+# Source Notes — V9
 
-## Contracts
+## CHI contracts
 
-- Ethereum CHI ERC-20: `0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`
-- Base CHI ERC-20: `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
+Ethereum CHI ERC-20:
+`0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`
 
-## Network structure
+Base CHI ERC-20:
+`0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
 
-Ethereum Mainnet is the Layer 1 network. Base is a separate EVM-compatible Layer 2 that executes transactions independently and settles batches back to Ethereum. The two networks have separate transaction histories, explorers, CHI contract addresses, balances and fees. Assets move between them through a bridge.
+BaseScan transfer page:
+`https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions`
 
-## Live transfer behavior
+## Base transaction reporting fix
 
-The serverless endpoint reads the newest token-transfer records from the Blockscout API v2 endpoint:
+The BaseScan token transfer tab is showing ERC-20 `Transfer` events emitted by the Base CHI contract.
 
-- `/api/v2/tokens/{token-address}/transfers`
+The tracker now treats:
 
-Blockscout returns keyset pagination data in `next_page_params`. The endpoint follows those page parameters and combines Ethereum and Base records by timestamp.
+- `Source Wallet` = ERC-20 Transfer event `from` address, meaning the wallet CHI flowed out of.
+- `Recipient` = ERC-20 Transfer event `to` address, meaning the wallet CHI flowed into.
+- `Amount` = decoded ERC-20 transfer value using 18 decimals.
+- `TXN` = transaction hash that emitted the Transfer event.
 
-## TXN total
+This avoids confusing the token-event sender with a separate transaction signer or backend caller.
 
-The TXN metric uses:
+## Data sources
 
-- `/api/v2/tokens/{token-address}/counters`
+Preferred Base mode:
 
-The Ethereum and Base `transfers_count` values are added together. This is separate from the smaller set of rows loaded for the paginated table.
+- Etherscan/BaseScan V2 log endpoint via `https://api.etherscan.io/v2/api`
+- Base Mainnet `chainid=8453`
+- Transfer topic `0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef`
+- Requires server-side `ETHERSCAN_API_KEY` in Vercel
 
-## Table pagination
+Fallback mode:
 
-- 20 records are displayed per page.
-- The table can hold up to the newest 300 combined records returned by the endpoint.
-- Wallet and flow filters are applied before pagination.
-- Filtering resets the table to page 1.
+- Blockscout V2 token counters: `/api/v2/tokens/{address_hash}/counters`
+- Blockscout V2 token transfers: `/api/v2/tokens/{address_hash}/transfers`
 
-## Source wallet behavior
-
-Rows attempt to show:
-
-- Source Wallet: the transaction initiator/signer when the compatible transaction indexer provides a match.
-- Token From: the ERC-20 transfer-event `from` address.
-- Recipient: the ERC-20 transfer-event `to` address.
-- Amount: the CHI amount in the transfer event.
-
-When a separate transaction signer cannot be resolved, Source Wallet falls back to Token From.
-
-## Timing
-
-The dashboard displays two different times:
-
-- `Updated`: when the dashboard API response was fetched.
-- `Latest record`: the timestamp on the newest returned CHI transfer.
-
-Those values should not be treated as the same thing. Public explorer indexing can lag the newest block.
-
-
-## V11 Base freshness fix
-
-The latest Base CHI rows are no longer dependent only on the Base Blockscout token index.
-
-The server now:
-- Reads recent CHI `Transfer` event logs directly from Base JSON-RPC.
-- Merges those records with the existing historical Blockscout rows.
-- Uses transaction and block RPC calls to obtain the transaction signer and timestamp.
-- Deduplicates matching RPC and Blockscout records by chain, transaction hash, and log index.
-
-For production reliability, set the Vercel environment variable `BASE_RPC_URL` to a production Base RPC endpoint. If it is not set, the code falls back to `https://mainnet.base.org`, which Base documents as rate limited and not intended for production systems.
-
-
-## V12 connection correction
-
-The V11 HTTP 500 was caused by a JavaScript temporal-dead-zone error, not by the
-browser or the Vercel-to-GitHub connection. V12 fixes the request initialization and
-reduces the default public Base RPC lookup to the latest 20,000 blocks in four
-5,000-block requests. A failed RPC request remains isolated by `Promise.allSettled()`,
-allowing the other holder and transfer sources to continue returning data.
-
-
-## V13 visual asset update
-
-The top navigation brand mark and the Important Data Notice now use the supplied
-`assets/chi-mark.png` file. The large hero mascot was intentionally removed from
-the Live Wallet Tracker section; the sidebar mascot remains unchanged.
-
-
-## V14 Base RPC reliability
-
-Base's official `eth_getLogs` documentation recommends block ranges under 2,000
-blocks for reliable queries. V14 uses 1,500-block ranges instead of the previous
-5,000-block ranges. The public Base RPC remains a fallback only and may be rate-limited.
+The public site links to BaseScan for direct explorer review.
