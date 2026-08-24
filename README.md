@@ -1,35 +1,28 @@
-# Chili Coin Live Tracker — V9 BaseScan Sync Fix
+# Chili Coin Live Wallet Tracker — V10 Stable Base API Fix
 
-This replacement package fixes the Base transaction reporting problem.
+This replacement set fixes the intermittent Base reporting problem.
 
-What changed:
+## What changed
 
-- Base transaction rows now prioritize the CHI ERC-20 `Transfer` event.
-- `Source Wallet` now means the CHI `from` wallet — the wallet CHI flowed out of.
-- `Recipient` means the CHI `to` wallet.
-- Amount is decoded from the ERC-20 transfer value, so 5 CHI and other reward amounts display correctly.
-- The TXN card uses indexed transfer-event counts instead of only the latest loaded rows.
-- If `ETHERSCAN_API_KEY` is configured in Vercel, Base rows use Etherscan/BaseScan V2 logs for the closest match to the BaseScan transfer tab.
-- If no API key is configured, the site falls back to Blockscout public token-transfer data and links back to BaseScan.
+- Base transaction rows now prioritize the Etherscan/BaseScan V2 `account/tokentx` ERC-20 token transfer endpoint using `chainid=8453`.
+- Source Wallet now means the ERC-20 CHI `from` wallet, matching the wallet CHI flowed out of on BaseScan.
+- Recipient means the ERC-20 CHI `to` wallet.
+- Amount is decoded from the actual token transfer value.
+- Base holder count no longer depends on scraping the BaseScan HTML page, which can be slow or blocked. Holder count uses Blockscout counters, while Base transaction flow uses the BaseScan/Etherscan API when `ETHERSCAN_API_KEY` is configured.
+- Blockscout remains a labeled fallback if the API key is missing or the Etherscan/BaseScan V2 request fails.
 
-## Important Vercel setting for closest BaseScan match
+## Required Vercel environment variable
 
-In Vercel, add this environment variable:
+Add this in Vercel Project Settings → Environment Variables:
 
 ```text
-ETHERSCAN_API_KEY=your_etherscan_api_key
+ETHERSCAN_API_KEY
 ```
 
-Etherscan API V2 uses one key across supported EVM chains. Base Mainnet uses `chainid=8453`.
+Use a real Etherscan API key. Do not use a Stripe/Resend/other `sk_live...` key.
 
-After adding the variable, redeploy the project.
+After adding the environment variable, redeploy the project.
 
 ## Upload
 
-Upload everything inside this folder to GitHub, including the whole `api` and `assets` folders.
-
-Recommended commit message:
-
-```text
-Fix BaseScan CHI transaction reporting
-```
+Upload everything inside this folder to GitHub, including the full `api` and `assets` folders.

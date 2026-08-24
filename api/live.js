@@ -344,6 +344,103 @@ async function etherscanV2Call(params) {
   return data;
 }
 
+
+function normalizeExplorerTokenTx(item, chain) {
+  const from = String(item.from || '').toLowerCase();
+  const to = String(item.to || '').toLowerCase();
+  const transactionHash = String(item.hash || item.transactionHash || '').toLowerCase();
+  if (!transactionHash || !from || !to) return null;
+
+  let event = 'Transfer';
+  if (from === ZERO_ADDRESS) event = 'Mint';
+  else if (to === ZERO_ADDRESS) event = 'Burn';
+
+  const decimals = asNumber(item.tokenDecimal ?? item.tokenDecimals ?? item.decimals) ?? 18;
+  const rawValue = item.value ?? item.amount ?? '0';
+  const logIndex = item.logIndex ?? '';
+  const ts = item.timeStamp ? new Date(Number(item.timeStamp) * 1000).toISOString() : null;
+
+  return {
+    chain: chain.label,
+    chainKey: chain.key,
+    transactionHash,
+    transactionUrl: `${chain.txExplorer}/${transactionHash}`,
+    blockNumber: String(item.blockNumber || ''),
+    timestamp: ts,
+    from,
+    to,
+    fromUrl: `${chain.addressExplorer}/${from}`,
+    toUrl: `${chain.addressExplorer}/${to}`,
+    event,
+    amount: decimalAmount(rawValue, decimals),
+    amountRaw: String(rawValue ?? ''),
+    decimals,
+    tokenSymbol: item.tokenSymbol || 'CHI',
+    sourceWallet: from,
+    sourceWalletUrl: `${chain.addressExplorer}/${from}`,
+    transactionInitiator: null,
+    calledContract: chain.token.toLowerCase(),
+    methodId: null,
+    functionName: null,
+    logIndex: String(logIndex),
+    sourceKind: 'erc20-token-transfer-event',
+    sourceName: `${chain.label} Etherscan/BaseScan V2 token transfer events`
+  };
+}
+
+async function fetchExplorerTokenTx(chain, maxPages) {
+  const transfers = [];
+  const seen = new Set();
+  const pageSize = 1000;
+  let page = 1;
+  let exhausted = false;
+
+  while (page <= maxPages) {
+    const data = await etherscanV2Call({
+      chainid: chain.chainId,
+      module: 'account',
+      action: 'tokentx',
+      contractaddress: chain.token,
+      page: String(page),
+      offset: String(pageSize),
+      sort: 'desc'
+    });
+
+    const items = Array.isArray(data.result) ? data.result : [];
+    if (!items.length) {
+      exhausted = true;
+      break;
+    }
+
+    for (const item of items) {
+      const transfer = normalizeExplorerTokenTx(item, chain);
+      if (!transfer) continue;
+      const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfer.from}:${transfer.to}:${transfer.amountRaw}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      transfers.push(transfer);
+    }
+
+    if (items.length < pageSize) {
+      exhausted = true;
+      break;
+    }
+    page += 1;
+  }
+
+  transfers.sort(sortTransfers);
+  return {
+    transfers: transfers.slice(0, TABLE_RECORD_LIMIT),
+    totalCount: transfers.length,
+    visibleTransferCount: Math.min(transfers.length, TABLE_RECORD_LIMIT),
+    source: `${chain.label} ${chain.key === 'base' ? 'BaseScan' : 'Etherscan'} V2 token transfer events`,
+    sourceUrl: chain.transferExplorer,
+    capped: !exhausted,
+    fetchedPages: page,
+    exactBaseScanStyle: true
+  };
+}
+
 async function fetchExplorerTransferLogs(chain, maxPages) {
   const transfers = [];
   const seen = new Set();
@@ -414,7 +511,7 @@ async function fetchBestTransferData(chain) {
 
   if (chain.key === 'base' && EXPLORER_API_KEY) {
     try {
-      const explorer = await fetchExplorerTransferLogs(chain, BASESCAN_LOG_MAX_PAGES);
+      const explorer = await fetchExplorerTokenTx(chain, BASESCAN_LOG_MAX_PAGES);
       return {
         ...explorer,
         totalCount: explorer.totalCount ?? counters?.transfers ?? explorer.transfers.length,
@@ -422,7 +519,7 @@ async function fetchBestTransferData(chain) {
         counterSource: counters?.source || null,
         counterSourceUrl: counters?.sourceUrl || null,
         warnings: [
-          explorer.capped ? `BaseScan log fetch reached ${BASESCAN_LOG_MAX_PAGES} pages; the all-time Base count may be higher.` : null,
+          explorer.capped ? `BaseScan token-transfer fetch reached ${BASESCAN_LOG_MAX_PAGES} pages; the all-time Base count may be higher than the loaded count.` : null,
           counterError ? `Base Blockscout counter unavailable: ${counterError}` : null
         ].filter(Boolean)
       };
@@ -434,7 +531,7 @@ async function fetchBestTransferData(chain) {
         counterCount: counters?.transfers ?? null,
         counterSource: counters?.source || null,
         counterSourceUrl: counters?.sourceUrl || null,
-        warnings: [`BaseScan V2 exact log source failed, using Blockscout fallback: ${error.message}`]
+        warnings: [`BaseScan/Etherscan V2 token-transfer source failed, using Blockscout fallback: ${error.message}`]
       };
     }
   }
@@ -467,8 +564,7 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   const fetchedAt = new Date().toISOString();
-  const [baseScanHolder, ethCounters, baseCounters, ethToken, baseToken, ethTransfers, baseTransfers] = await Promise.allSettled([
-    fetchBaseScanHolderCount(),
+  const [ethCounters, baseCounters, ethToken, baseToken, ethTransfers, baseTransfers] = await Promise.allSettled([
     fetchBlockscoutCounters(chainConfigs.ethereum),
     fetchBlockscoutCounters(chainConfigs.base),
     fetchTokenInfo(chainConfigs.ethereum),
@@ -485,7 +581,6 @@ export default async function handler(req, res) {
   const ethTransferValue = ethTransfers.status === 'fulfilled' ? ethTransfers.value : null;
   const baseTransferValue = baseTransfers.status === 'fulfilled' ? baseTransfers.value : null;
 
-  if (baseScanHolder.status === 'rejected') warnings.push(`BaseScan holder count unavailable: ${baseScanHolder.reason?.message || 'unknown error'}`);
   if (ethCounters.status === 'rejected') warnings.push(`Ethereum counter unavailable: ${ethCounters.reason?.message || 'unknown error'}`);
   if (baseCounters.status === 'rejected') warnings.push(`Base counter unavailable: ${baseCounters.reason?.message || 'unknown error'}`);
   if (ethToken.status === 'rejected') warnings.push(`Ethereum token metadata unavailable: ${ethToken.reason?.message || 'unknown error'}`);
@@ -495,15 +590,9 @@ export default async function handler(req, res) {
   if (Array.isArray(ethTransferValue?.warnings)) warnings.push(...ethTransferValue.warnings);
   if (Array.isArray(baseTransferValue?.warnings)) warnings.push(...baseTransferValue.warnings);
 
-  let baseHolders = baseScanHolder.status === 'fulfilled' ? baseScanHolder.value.count : null;
-  let baseHolderSource = baseScanHolder.status === 'fulfilled' ? baseScanHolder.value.source : null;
-  let baseHolderSourceUrl = baseScanHolder.status === 'fulfilled' ? baseScanHolder.value.sourceUrl : BASESCAN_URL;
-
-  if (baseHolders === null && Number.isFinite(baseCounterValue?.holders)) {
-    baseHolders = baseCounterValue.holders;
-    baseHolderSource = 'Base Blockscout token counters fallback';
-    baseHolderSourceUrl = baseCounterValue.sourceUrl;
-  }
+  let baseHolders = Number.isFinite(baseCounterValue?.holders) ? baseCounterValue.holders : null;
+  let baseHolderSource = baseHolders !== null ? 'Base Blockscout token counters' : null;
+  let baseHolderSourceUrl = baseCounterValue?.sourceUrl || BASESCAN_URL;
 
   const ethHolders = Number.isFinite(ethCounterValue?.holders)
     ? ethCounterValue.holders
@@ -535,8 +624,8 @@ export default async function handler(req, res) {
       baseScanExactMode: Boolean(EXPLORER_API_KEY && baseTransferValue?.source?.includes('BaseScan')),
       explorerApiKeyConfigured: Boolean(EXPLORER_API_KEY),
       note: EXPLORER_API_KEY
-        ? 'Base transfer rows use Etherscan/BaseScan V2 logs when available, with Blockscout as fallback.'
-        : 'BaseScan exact mode is off. Add ETHERSCAN_API_KEY in Vercel to query the official BaseScan/Etherscan V2 log endpoint server-side.'
+        ? 'Base transfer rows use Etherscan/BaseScan V2 ERC-20 token-transfer events when available, with Blockscout only as a labeled fallback.'
+        : 'BaseScan exact mode is off. Add ETHERSCAN_API_KEY in Vercel to query the official Etherscan/BaseScan V2 ERC-20 token-transfer endpoint server-side.'
     },
     ethereum: {
       holders: ethHolders,
@@ -573,7 +662,7 @@ export default async function handler(req, res) {
       ethereumLatestCount: ethTransferRows.length,
       baseLatestCount: baseTransferRows.length,
       label: 'All Chain Transactions',
-      note: 'The TXN card counts indexed ERC-20 Transfer events. Base rows prioritize the Transfer event itself: Source Wallet is the CHI From wallet, Recipient is the CHI To wallet, and Amount is decoded from the Transfer event value.',
+      note: 'The TXN card counts indexed ERC-20 token Transfer events. Base rows use the BaseScan/Etherscan V2 tokentx event feed when configured: Source Wallet is the CHI From wallet, Recipient is the CHI To wallet, and Amount is decoded from the token transfer event value.',
       records: allTransfers,
       sources: [
         ethTransferValue?.source || null,
