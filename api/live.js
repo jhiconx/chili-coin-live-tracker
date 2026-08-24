@@ -111,11 +111,36 @@ function parseHolderCount(content) {
   return null;
 }
 
-async function fetchBaseScanHolderCount() {
+function parseTransferCount(content) {
+  const raw = String(content || '');
+  const plain = toPlainText(raw);
+  const patterns = [
+    /A\s+total\s+of\s+([\d,]+)\s+token\s+transfers?\s+found/i,
+    /A\s+total\s+of\s+([\d,]+)\s+transfers?\s+found/i,
+    /([\d,]+)\s+token\s+transfers?\s+found/i,
+    /([\d,]+)\s+transfers?\s+found/i,
+    /\bTransfers\b\s*([\d,]+)/i
+  ];
+
+  for (const source of [plain, raw]) {
+    for (const pattern of patterns) {
+      const match = source.match(pattern);
+      if (!match) continue;
+      const count = asNumber(match[1]);
+      if (Number.isInteger(count) && count >= 0) return count;
+    }
+  }
+  return null;
+}
+
+async function fetchBaseScanTokenSnapshot() {
   const pageUrl = `https://basescan.org/token/${BASE_TOKEN}`;
+  const txPageUrl = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
   const attempts = [
-    { url: pageUrl, source: 'BaseScan token page' },
-    { url: `https://r.jina.ai/https://basescan.org/token/${BASE_TOKEN}`, source: 'BaseScan token page via text mirror' }
+    { url: `https://r.jina.ai/${txPageUrl}`, source: 'BaseScan token page via text mirror' },
+    { url: `https://r.jina.ai/${pageUrl}`, source: 'BaseScan token overview via text mirror' },
+    { url: txPageUrl, source: 'BaseScan token page' },
+    { url: pageUrl, source: 'BaseScan token overview page' }
   ];
 
   const failures = [];
@@ -128,15 +153,22 @@ async function fetchBaseScanHolderCount() {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const content = await response.text();
-      const count = parseHolderCount(content);
-      if (count === null) throw new Error('holder count not present');
-      return { count, source: attempt.source, sourceUrl: BASESCAN_URL };
+      const holders = parseHolderCount(content);
+      const transfers = parseTransferCount(content);
+      if (holders === null && transfers === null) throw new Error('holder/transfer counts not present');
+      return { holders, transfers, source: attempt.source, sourceUrl: BASESCAN_URL };
     } catch (error) {
       failures.push(`${attempt.source}: ${error.message}`);
     }
   }
 
   throw new Error(failures.join(' | '));
+}
+
+async function fetchBaseScanHolderCount() {
+  const snapshot = await fetchBaseScanTokenSnapshot();
+  if (snapshot.holders === null) throw new Error('BaseScan holder count not present');
+  return { count: snapshot.holders, source: snapshot.source, sourceUrl: snapshot.sourceUrl };
 }
 
 async function fetchBlockscoutCounters(chain) {
@@ -564,9 +596,10 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   const fetchedAt = new Date().toISOString();
-  const [ethCounters, baseCounters, ethToken, baseToken, ethTransfers, baseTransfers] = await Promise.allSettled([
+  const [ethCounters, baseCounters, baseScanSnapshot, ethToken, baseToken, ethTransfers, baseTransfers] = await Promise.allSettled([
     fetchBlockscoutCounters(chainConfigs.ethereum),
     fetchBlockscoutCounters(chainConfigs.base),
+    fetchBaseScanTokenSnapshot(),
     fetchTokenInfo(chainConfigs.ethereum),
     fetchTokenInfo(chainConfigs.base),
     fetchBestTransferData(chainConfigs.ethereum),
@@ -576,6 +609,7 @@ export default async function handler(req, res) {
   const warnings = [];
   const ethCounterValue = ethCounters.status === 'fulfilled' ? ethCounters.value : null;
   const baseCounterValue = baseCounters.status === 'fulfilled' ? baseCounters.value : null;
+  const baseScanSnapshotValue = baseScanSnapshot.status === 'fulfilled' ? baseScanSnapshot.value : null;
   const ethTokenValue = ethToken.status === 'fulfilled' ? ethToken.value : null;
   const baseTokenValue = baseToken.status === 'fulfilled' ? baseToken.value : null;
   const ethTransferValue = ethTransfers.status === 'fulfilled' ? ethTransfers.value : null;
@@ -583,6 +617,7 @@ export default async function handler(req, res) {
 
   if (ethCounters.status === 'rejected') warnings.push(`Ethereum counter unavailable: ${ethCounters.reason?.message || 'unknown error'}`);
   if (baseCounters.status === 'rejected') warnings.push(`Base counter unavailable: ${baseCounters.reason?.message || 'unknown error'}`);
+  if (baseScanSnapshot.status === 'rejected') warnings.push(`BaseScan page snapshot unavailable; using public indexer fallback where needed: ${baseScanSnapshot.reason?.message || 'unknown error'}`);
   if (ethToken.status === 'rejected') warnings.push(`Ethereum token metadata unavailable: ${ethToken.reason?.message || 'unknown error'}`);
   if (baseToken.status === 'rejected') warnings.push(`Base token metadata unavailable: ${baseToken.reason?.message || 'unknown error'}`);
   if (ethTransfers.status === 'rejected') warnings.push(`Ethereum CHI transfer feed unavailable: ${ethTransfers.reason?.message || 'unknown error'}`);
@@ -590,9 +625,15 @@ export default async function handler(req, res) {
   if (Array.isArray(ethTransferValue?.warnings)) warnings.push(...ethTransferValue.warnings);
   if (Array.isArray(baseTransferValue?.warnings)) warnings.push(...baseTransferValue.warnings);
 
-  let baseHolders = Number.isFinite(baseCounterValue?.holders) ? baseCounterValue.holders : null;
-  let baseHolderSource = baseHolders !== null ? 'Base Blockscout token counters' : null;
-  let baseHolderSourceUrl = baseCounterValue?.sourceUrl || BASESCAN_URL;
+  let baseHolders = Number.isFinite(baseScanSnapshotValue?.holders)
+    ? baseScanSnapshotValue.holders
+    : (Number.isFinite(baseCounterValue?.holders) ? baseCounterValue.holders : null);
+  let baseHolderSource = Number.isFinite(baseScanSnapshotValue?.holders)
+    ? baseScanSnapshotValue.source
+    : (baseHolders !== null ? 'Base Blockscout token counters' : null);
+  let baseHolderSourceUrl = Number.isFinite(baseScanSnapshotValue?.holders)
+    ? baseScanSnapshotValue.sourceUrl
+    : (baseCounterValue?.sourceUrl || BASESCAN_URL);
 
   const ethHolders = Number.isFinite(ethCounterValue?.holders)
     ? ethCounterValue.holders
@@ -606,9 +647,11 @@ export default async function handler(req, res) {
   const ethTransferTotal = Number.isFinite(ethTransferValue?.totalCount)
     ? ethTransferValue.totalCount
     : (Number.isFinite(ethCounterValue?.transfers) ? ethCounterValue.transfers : ethTransferRows.length);
-  const baseTransferTotal = Number.isFinite(baseTransferValue?.totalCount)
-    ? baseTransferValue.totalCount
-    : (Number.isFinite(baseCounterValue?.transfers) ? baseCounterValue.transfers : baseTransferRows.length);
+  const baseTransferTotal = Number.isFinite(baseScanSnapshotValue?.transfers)
+    ? baseScanSnapshotValue.transfers
+    : (Number.isFinite(baseTransferValue?.totalCount)
+      ? baseTransferValue.totalCount
+      : (Number.isFinite(baseCounterValue?.transfers) ? baseCounterValue.transfers : baseTransferRows.length));
   const allTransferTotal = ethTransferTotal + baseTransferTotal;
   const allTransfers = [...ethTransferRows, ...baseTransferRows].sort(sortTransfers).slice(0, TABLE_RECORD_LIMIT);
 
@@ -621,11 +664,12 @@ export default async function handler(req, res) {
       baseToken: BASE_TOKEN
     },
     dataMode: {
+      baseScanPageMode: Boolean(baseScanSnapshotValue),
       baseScanExactMode: Boolean(EXPLORER_API_KEY && baseTransferValue?.source?.includes('BaseScan')),
       explorerApiKeyConfigured: Boolean(EXPLORER_API_KEY),
-      note: EXPLORER_API_KEY
-        ? 'Base transfer rows use Etherscan/BaseScan V2 ERC-20 token-transfer events when available, with Blockscout only as a labeled fallback.'
-        : 'BaseScan exact mode is off. Add ETHERSCAN_API_KEY in Vercel to query the official Etherscan/BaseScan V2 ERC-20 token-transfer endpoint server-side.'
+      note: baseScanSnapshotValue
+        ? 'No API key mode is active. Base holder and transfer totals are read from the public BaseScan token page/text mirror when available; latest rows use public token-transfer indexers.'
+        : 'BaseScan page mode is unavailable for this refresh. The tracker is using public indexer fallback data and links back to BaseScan for review.'
     },
     ethereum: {
       holders: ethHolders,
@@ -649,10 +693,10 @@ export default async function handler(req, res) {
       transfers: baseTransferRows,
       transferCount: baseTransferTotal,
       visibleTransferCount: baseTransferRows.length,
-      transferSource: baseTransferValue?.source || null,
-      transferSourceUrl: baseTransferValue?.sourceUrl || BASESCAN_URL,
+      transferSource: baseScanSnapshotValue?.transfers ? `${baseScanSnapshotValue.source} transfer total + ${baseTransferValue?.source || 'public latest rows'}` : (baseTransferValue?.source || null),
+      transferSourceUrl: baseScanSnapshotValue?.sourceUrl || baseTransferValue?.sourceUrl || BASESCAN_URL,
       transferExplorerUrl: BASESCAN_URL,
-      counterCount: baseTransferValue?.counterCount ?? baseCounterValue?.transfers ?? null
+      counterCount: baseScanSnapshotValue?.transfers ?? baseTransferValue?.counterCount ?? baseCounterValue?.transfers ?? null
     },
     transactions: {
       totalCount: allTransferTotal,
