@@ -7,10 +7,12 @@ const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
 const BASESCAN_TOKEN_URL = `https://basescan.org/token/${BASE_TOKEN}`;
 
-// V12: stable no-key mode.
-// The previous build attempted to scrape BaseScan/Jina on every refresh. That made Base slow/hit-or-miss.
-// This build uses Blockscout public API as the fast primary source and only attempts BaseScan text as a short optional hint.
+// V13: BaseScan/Etherscan API key primary, Blockscout fallback.
+// V12 prioritized no-key stability, but Blockscout's Base holder counter can lag BaseScan badly.
+// This build uses Etherscan API V2 first when ETHERSCAN_API_KEY is set in Vercel.
+// If no valid key is present, it falls back to the public Blockscout indexer.
 const FAST_TIMEOUT_MS = 5_500;
+const EXPLORER_TIMEOUT_MS = 8_500;
 const BASESCAN_HINT_TIMEOUT_MS = 2_500;
 const TABLE_RECORD_LIMIT = 300;
 const TRANSFER_PAGES = 3;
@@ -69,6 +71,124 @@ async function fetchJson(url, timeoutMs = FAST_TIMEOUT_MS) {
   const response = await fetchWithTimeout(url, {}, timeoutMs);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
+}
+
+function getExplorerApiKey() {
+  const raw = String(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY || '').trim();
+  if (!raw) return null;
+  if (/^sk_live/i.test(raw)) return null;
+  return raw;
+}
+
+function chainIdFor(chain) {
+  return chain.key === 'base' ? '8453' : '1';
+}
+
+async function fetchEtherscanV2(params, timeoutMs = EXPLORER_TIMEOUT_MS) {
+  const apiKey = getExplorerApiKey();
+  if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not configured or is not a valid Etherscan key');
+  const url = new URL('https://api.etherscan.io/v2/api');
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== null && value !== undefined && value !== '') url.searchParams.set(key, String(value));
+  }
+  url.searchParams.set('apikey', apiKey);
+  const data = await fetchJson(url.toString(), timeoutMs);
+  if (data.status === '1') return data.result;
+  const message = data.message || data.result || 'Etherscan API request failed';
+  throw new Error(String(message));
+}
+
+async function fetchEtherscanHolderCount(chain) {
+  const result = await fetchEtherscanV2({
+    chainid: chainIdFor(chain),
+    module: 'token',
+    action: 'tokenholdercount',
+    contractaddress: chain.token
+  });
+  return {
+    holders: asNumber(result),
+    transfers: null,
+    source: `${chain.label} Etherscan API tokenholdercount`,
+    sourceUrl: chain.key === 'base' ? BASESCAN_TOKEN_URL : ETHERSCAN_URL
+  };
+}
+
+function normalizeEtherscanTokenTx(item, chain) {
+  const from = String(item.from || '').toLowerCase();
+  const to = String(item.to || '').toLowerCase();
+  const transactionHash = String(item.hash || '').toLowerCase();
+  if (!transactionHash || !from || !to) return null;
+  const tokenHash = String(item.contractAddress || item.contractaddress || chain.token).toLowerCase();
+  if (tokenHash && tokenHash !== chain.token.toLowerCase()) return null;
+
+  let event = 'Transfer';
+  if (from === ZERO_ADDRESS) event = 'Mint';
+  else if (to === ZERO_ADDRESS) event = 'Burn';
+
+  const decimals = asNumber(item.tokenDecimal ?? item.tokenDecimals ?? item.decimals) ?? 18;
+  const timestamp = item.timeStamp ? new Date(Number(item.timeStamp) * 1000).toISOString() : null;
+  const logIndex = item.logIndex ?? item.transactionIndex ?? item.nonce ?? '';
+
+  return {
+    chain: chain.label,
+    chainKey: chain.key,
+    transactionHash,
+    transactionUrl: `${chain.txExplorer}/${transactionHash}`,
+    blockNumber: String(item.blockNumber || ''),
+    timestamp,
+    from,
+    to,
+    fromUrl: `${chain.addressExplorer}/${from}`,
+    toUrl: `${chain.addressExplorer}/${to}`,
+    event,
+    amount: decimalAmount(item.value, decimals),
+    amountRaw: String(item.value ?? ''),
+    decimals,
+    tokenSymbol: item.tokenSymbol || 'CHI',
+    sourceWallet: from,
+    sourceWalletUrl: `${chain.addressExplorer}/${from}`,
+    transactionInitiator: null,
+    calledContract: chain.token.toLowerCase(),
+    methodId: null,
+    functionName: item.functionName || null,
+    logIndex: String(logIndex),
+    sourceKind: 'erc20-transfer-event',
+    sourceName: `${chain.label} Etherscan API token transfers`
+  };
+}
+
+async function fetchEtherscanTokenTransfers(chain) {
+  const offset = 10000;
+  const result = await fetchEtherscanV2({
+    chainid: chainIdFor(chain),
+    module: 'account',
+    action: 'tokentx',
+    contractaddress: chain.token,
+    startblock: 0,
+    endblock: 99999999,
+    page: 1,
+    offset,
+    sort: 'desc'
+  }, EXPLORER_TIMEOUT_MS * 2);
+  const items = Array.isArray(result) ? result : [];
+  const transfers = [];
+  const seen = new Set();
+  for (const item of items) {
+    const transfer = normalizeEtherscanTokenTx(item, chain);
+    if (!transfer) continue;
+    const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfer.from}:${transfer.to}:${transfer.amountRaw}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (transfers.length < TABLE_RECORD_LIMIT) transfers.push(transfer);
+  }
+  return {
+    transfers,
+    visibleTransferCount: transfers.length,
+    totalTransferCount: items.length,
+    source: `${chain.label} Etherscan API ERC-20 tokentx`,
+    sourceUrl: chain.transferExplorer,
+    capped: items.length >= offset
+  };
 }
 
 function decodeEntities(value) {
@@ -287,26 +407,52 @@ async function settleWithTimeout(promise, ms, label) {
 }
 
 async function fetchChainBundle(chain) {
-  const [countersResult, tokenResult, transfersResult] = await Promise.all([
-    settleWithTimeout(fetchCounters(chain), FAST_TIMEOUT_MS, `${chain.label} counters`),
-    settleWithTimeout(fetchTokenInfo(chain), FAST_TIMEOUT_MS, `${chain.label} token metadata`),
-    settleWithTimeout(fetchTokenTransfers(chain), FAST_TIMEOUT_MS * 2, `${chain.label} transfer rows`)
-  ]);
-
-  const counters = countersResult.status === 'fulfilled' ? countersResult.value : null;
-  const token = tokenResult.status === 'fulfilled' ? tokenResult.value : null;
-  const transferData = transfersResult.status === 'fulfilled' ? transfersResult.value : null;
+  const apiKeyConfigured = Boolean(getExplorerApiKey());
   const warnings = [];
-  if (countersResult.status === 'rejected') warnings.push(`${chain.label} counters unavailable: ${countersResult.reason?.message || 'unknown error'}`);
-  if (tokenResult.status === 'rejected') warnings.push(`${chain.label} token metadata unavailable: ${tokenResult.reason?.message || 'unknown error'}`);
-  if (transfersResult.status === 'rejected') warnings.push(`${chain.label} transfer rows unavailable: ${transfersResult.reason?.message || 'unknown error'}`);
+  let counters = null;
+  let token = null;
+  let transferData = null;
+
+  if (apiKeyConfigured) {
+    const [holderResult, transfersResult, tokenResult] = await Promise.all([
+      settleWithTimeout(fetchEtherscanHolderCount(chain), EXPLORER_TIMEOUT_MS, `${chain.label} Etherscan holder count`),
+      settleWithTimeout(fetchEtherscanTokenTransfers(chain), EXPLORER_TIMEOUT_MS * 2, `${chain.label} Etherscan token transfers`),
+      settleWithTimeout(fetchTokenInfo(chain), FAST_TIMEOUT_MS, `${chain.label} token metadata`)
+    ]);
+
+    if (holderResult.status === 'fulfilled') counters = holderResult.value;
+    else warnings.push(`${chain.label} Etherscan holder count unavailable: ${holderResult.reason?.message || 'unknown error'}`);
+
+    if (transfersResult.status === 'fulfilled') transferData = transfersResult.value;
+    else warnings.push(`${chain.label} Etherscan token transfers unavailable: ${transfersResult.reason?.message || 'unknown error'}`);
+
+    if (tokenResult.status === 'fulfilled') token = tokenResult.value;
+    else warnings.push(`${chain.label} token metadata unavailable: ${tokenResult.reason?.message || 'unknown error'}`);
+  }
+
+  if (!counters || !transferData) {
+    const [countersResult, tokenResult, transfersResult] = await Promise.all([
+      !counters ? settleWithTimeout(fetchCounters(chain), FAST_TIMEOUT_MS, `${chain.label} Blockscout counters`) : Promise.resolve({ status: 'fulfilled', value: counters }),
+      !token ? settleWithTimeout(fetchTokenInfo(chain), FAST_TIMEOUT_MS, `${chain.label} token metadata`) : Promise.resolve({ status: 'fulfilled', value: token }),
+      !transferData ? settleWithTimeout(fetchTokenTransfers(chain), FAST_TIMEOUT_MS * 2, `${chain.label} Blockscout transfer rows`) : Promise.resolve({ status: 'fulfilled', value: transferData })
+    ]);
+
+    if (!counters && countersResult.status === 'fulfilled') counters = countersResult.value;
+    else if (!counters && countersResult.status === 'rejected') warnings.push(`${chain.label} Blockscout counters unavailable: ${countersResult.reason?.message || 'unknown error'}`);
+
+    if (!token && tokenResult.status === 'fulfilled') token = tokenResult.value;
+    else if (!token && tokenResult.status === 'rejected') warnings.push(`${chain.label} token metadata unavailable: ${tokenResult.reason?.message || 'unknown error'}`);
+
+    if (!transferData && transfersResult.status === 'fulfilled') transferData = transfersResult.value;
+    else if (!transferData && transfersResult.status === 'rejected') warnings.push(`${chain.label} Blockscout transfer rows unavailable: ${transfersResult.reason?.message || 'unknown error'}`);
+  }
 
   const holders = Number.isFinite(counters?.holders)
     ? counters.holders
     : (Number.isFinite(token?.count) ? token.count : null);
-  const transferCount = Number.isFinite(counters?.transfers)
-    ? counters.transfers
-    : (Array.isArray(transferData?.transfers) ? transferData.transfers.length : 0);
+  const transferCount = Number.isFinite(transferData?.totalTransferCount)
+    ? transferData.totalTransferCount
+    : (Number.isFinite(counters?.transfers) ? counters.transfers : (Array.isArray(transferData?.transfers) ? transferData.transfers.length : 0));
   const transfers = Array.isArray(transferData?.transfers) ? transferData.transfers : [];
 
   return {
@@ -345,6 +491,9 @@ export default async function handler(req, res) {
   ]);
 
   const warnings = [];
+  const rawExplorerKey = String(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY || '').trim();
+  if (rawExplorerKey && /^sk_live/i.test(rawExplorerKey)) warnings.push('A value is present for ETHERSCAN_API_KEY/BASESCAN_API_KEY, but it looks like a non-Etherscan secret key. The tracker ignored it and used fallback data.');
+  if (!rawExplorerKey) warnings.push('No ETHERSCAN_API_KEY is visible to this deployment. Base holder count is using fallback data.');
   if (ethereumResult.status === 'rejected') warnings.push(`Ethereum bundle unavailable: ${ethereumResult.reason?.message || 'unknown error'}`);
   if (baseResult.status === 'rejected') warnings.push(`Base bundle unavailable: ${baseResult.reason?.message || 'unknown error'}`);
   if (baseScanHintResult.status === 'rejected') warnings.push(`BaseScan optional hint skipped: ${baseScanHintResult.reason?.message || 'unknown error'}`);
@@ -394,9 +543,9 @@ export default async function handler(req, res) {
       baseToken: BASE_TOKEN
     },
     dataMode: {
-      mode: 'v12-fast-stable-no-key',
+      mode: 'v13-basescan-api-primary',
       explorerApiKeyConfigured: Boolean(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY),
-      note: 'Fast no-key mode is active. Base data uses a public token indexer first so the dashboard does not block on BaseScan page scraping. BaseScan remains linked for official review.'
+      note: getExplorerApiKey() ? 'Etherscan API V2 is active. Base uses chainid=8453 for holder count and ERC-20 transfer events, with Blockscout fallback only if the API call fails.' : 'No valid ETHERSCAN_API_KEY detected. The dashboard is using public Blockscout fallback data, which can lag BaseScan holder totals.'
     },
     ethereum,
     base,
