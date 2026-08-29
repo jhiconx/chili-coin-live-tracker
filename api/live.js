@@ -7,10 +7,10 @@ const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
 const BASESCAN_TOKEN_URL = `https://basescan.org/token/${BASE_TOKEN}`;
 
-// V16: stable split Base + fast transaction rows.
-// Base holder and transfer totals are loaded separately from visible transaction rows.
-// The transaction table asks Etherscan/BaseScan for a small latest-row page, not a huge all-time page, so TXN rows do not time out.
-// The TXN card uses official BaseScan-style total counts when available, while the table shows only recent rows.
+// V17: official transfer-count fix.
+// Holder cards and the TXN card are calculated separately from the latest visible table rows.
+// With ETHERSCAN_API_KEY configured, the all-chain TXN card counts all indexed ERC-20 Transfer events by asking Etherscan/BaseScan for the full token-transfer list count.
+// The table still fetches only a small latest-row page so the site stays responsive.
 const FAST_TIMEOUT_MS = 5_500;
 const EXPLORER_TIMEOUT_MS = 8_500;
 const BASESCAN_HINT_TIMEOUT_MS = 2_500;
@@ -111,6 +111,71 @@ async function fetchEtherscanHolderCount(chain) {
     transfers: null,
     source: `${chain.label} Etherscan API tokenholdercount`,
     sourceUrl: chain.key === 'base' ? BASESCAN_TOKEN_URL : ETHERSCAN_URL
+  };
+}
+
+async function fetchEtherscanTokenTransferCount(chain) {
+  const result = await fetchEtherscanV2({
+    chainid: chainIdFor(chain),
+    module: 'account',
+    action: 'tokentx',
+    contractaddress: chain.token,
+    startblock: 0,
+    endblock: 99999999,
+    page: 1,
+    offset: 10000,
+    sort: 'desc'
+  }, EXPLORER_TIMEOUT_MS * 3);
+  const items = Array.isArray(result) ? result : [];
+  return {
+    holders: null,
+    transfers: items.length,
+    source: items.length >= 10000 ? `${chain.label} Etherscan API tokentx transfer count capped at 10000` : `${chain.label} Etherscan API tokentx transfer count`,
+    sourceUrl: chain.transferExplorer
+  };
+}
+
+function mergeCounterResults(results, fallbackSourceUrl = null) {
+  const fulfilled = results
+    .filter(result => result && result.status === 'fulfilled' && result.value)
+    .map(result => result.value);
+
+  let holders = null;
+  let holderSource = null;
+  let holderSourceUrl = null;
+  let transfers = null;
+  let transferSource = null;
+  let transferSourceUrl = null;
+
+  for (const value of fulfilled) {
+    if (Number.isFinite(value.holders)) {
+      if (!Number.isFinite(holders) || value.holders > holders) {
+        holders = value.holders;
+        holderSource = value.source || holderSource;
+        holderSourceUrl = value.sourceUrl || holderSourceUrl;
+      }
+    }
+    if (Number.isFinite(value.transfers)) {
+      if (!Number.isFinite(transfers) || value.transfers > transfers) {
+        transfers = value.transfers;
+        transferSource = value.source || transferSource;
+        transferSourceUrl = value.sourceUrl || transferSourceUrl;
+      }
+    }
+  }
+
+  if (!Number.isFinite(holders) && !Number.isFinite(transfers)) return null;
+
+  const sources = Array.from(new Set([holderSource, transferSource].filter(Boolean)));
+  return {
+    holders,
+    transfers,
+    source: sources.join(' + ') || 'Explorer counter sources',
+    sourceUrl: holderSourceUrl || transferSourceUrl || fallbackSourceUrl,
+    holderSource,
+    holderSourceUrl,
+    transferSource,
+    transferSourceUrl
   };
 }
 
@@ -509,17 +574,19 @@ async function fetchChainBundle(chain) {
   }
 
   if (apiKeyConfigured) {
-    const [holderResult, transfersResult, tokenResult] = await Promise.all([
+    const [holderResult, transferCountResult, transfersResult, tokenResult] = await Promise.all([
       settleWithTimeout(fetchEtherscanHolderCount(chain), EXPLORER_TIMEOUT_MS, `${chain.label} Etherscan holder count`),
-      settleWithTimeout(fetchEtherscanTokenTransfers(chain), EXPLORER_TIMEOUT_MS * 2, `${chain.label} Etherscan token transfers`),
+      settleWithTimeout(fetchEtherscanTokenTransferCount(chain), EXPLORER_TIMEOUT_MS * 3, `${chain.label} Etherscan all-time transfer count`),
+      settleWithTimeout(fetchEtherscanTokenTransfers(chain), EXPLORER_TIMEOUT_MS * 2, `${chain.label} Etherscan latest token transfers`),
       settleWithTimeout(fetchTokenInfo(chain), FAST_TIMEOUT_MS, `${chain.label} token metadata`)
     ]);
 
-    if (holderResult.status === 'fulfilled') counters = holderResult.value;
-    else warnings.push(`${chain.label} Etherscan holder count unavailable: ${holderResult.reason?.message || 'unknown error'}`);
+    counters = mergeCounterResults([holderResult, transferCountResult], chain.transferExplorer) || counters;
+    if (holderResult.status === 'rejected') warnings.push(`${chain.label} Etherscan holder count unavailable: ${holderResult.reason?.message || 'unknown error'}`);
+    if (transferCountResult.status === 'rejected') warnings.push(`${chain.label} Etherscan all-time transfer count unavailable: ${transferCountResult.reason?.message || 'unknown error'}`);
 
     if (transfersResult.status === 'fulfilled') transferData = transfersResult.value;
-    else warnings.push(`${chain.label} Etherscan token transfers unavailable: ${transfersResult.reason?.message || 'unknown error'}`);
+    else warnings.push(`${chain.label} Etherscan latest token transfers unavailable: ${transfersResult.reason?.message || 'unknown error'}`);
 
     if (tokenResult.status === 'fulfilled') token = tokenResult.value;
     else warnings.push(`${chain.label} token metadata unavailable: ${tokenResult.reason?.message || 'unknown error'}`);
@@ -545,9 +612,9 @@ async function fetchChainBundle(chain) {
   const holders = Number.isFinite(counters?.holders)
     ? counters.holders
     : (Number.isFinite(token?.count) ? token.count : null);
-  const transferCount = Number.isFinite(transferData?.totalTransferCount)
-    ? transferData.totalTransferCount
-    : (Number.isFinite(counters?.transfers) ? counters.transfers : (Array.isArray(transferData?.transfers) ? transferData.transfers.length : 0));
+  const visibleRows = Array.isArray(transferData?.transfers) ? transferData.transfers.length : 0;
+  const transferCountCandidates = [transferData?.totalTransferCount, counters?.transfers, visibleRows].filter(Number.isFinite);
+  const transferCount = transferCountCandidates.length ? Math.max(...transferCountCandidates) : 0;
   const transfers = Array.isArray(transferData?.transfers) ? transferData.transfers : [];
 
   return {
@@ -560,8 +627,8 @@ async function fetchChainBundle(chain) {
     transfers,
     transferCount,
     visibleTransferCount: transfers.length,
-    transferSource: transferData?.source || null,
-    transferSourceUrl: transferData?.sourceUrl || chain.transferExplorer,
+    transferSource: counters?.transferSource || transferData?.source || null,
+    transferSourceUrl: counters?.transferSourceUrl || transferData?.sourceUrl || chain.transferExplorer,
     warnings
   };
 }
@@ -580,23 +647,15 @@ async function fetchBaseOfficialCountersFast() {
   }
 
   const attempts = [
-    settleWithTimeout(fetchEtherscanHolderCount(chainConfigs.base), 4_500, 'Base Etherscan tokenholdercount'),
-    settleWithTimeout(fetchBaseScanLegacyTokenInfo(4_500), 4_500, 'BaseScan tokeninfo'),
-    settleWithTimeout(fetchBaseScanLegacyHolderListCount(6_500), 6_500, 'BaseScan tokenholderlist'),
-    settleWithTimeout(fetchBaseScanPageSummary(8_000), 8_000, 'BaseScan token page text mirror')
+    settleWithTimeout(fetchEtherscanHolderCount(chainConfigs.base), 5_500, 'Base Etherscan tokenholdercount'),
+    settleWithTimeout(fetchEtherscanTokenTransferCount(chainConfigs.base), 12_000, 'Base Etherscan tokentx transfer count'),
+    settleWithTimeout(fetchBaseScanLegacyTokenInfo(5_500), 5_500, 'BaseScan tokeninfo'),
+    settleWithTimeout(fetchBaseScanLegacyHolderListCount(7_500), 7_500, 'BaseScan tokenholderlist'),
+    settleWithTimeout(fetchBaseScanPageSummary(10_000), 10_000, 'BaseScan token page text mirror')
   ];
   const results = await Promise.all(attempts);
-  const fulfilled = results
-    .filter(result => result.status === 'fulfilled' && result.value && (Number.isFinite(result.value.holders) || Number.isFinite(result.value.transfers)))
-    .map(result => result.value);
-
-  if (fulfilled.length) {
-    fulfilled.sort((a, b) => {
-      const score = value => (Number.isFinite(value.holders) ? 2 : 0) + (Number.isFinite(value.transfers) ? 1 : 0);
-      return score(b) - score(a);
-    });
-    return fulfilled[0];
-  }
+  const merged = mergeCounterResults(results, BASESCAN_TOKEN_URL);
+  if (merged) return merged;
 
   const errors = results
     .filter(result => result.status === 'rejected')
@@ -650,9 +709,8 @@ async function fetchBaseIndependentBundle() {
   if (tokenResult.status === 'rejected') warnings.push(`Base token metadata unavailable: ${tokenResult.reason?.message || 'unknown error'}`);
 
   const transfers = Array.isArray(transferData?.transfers) ? transferData.transfers : [];
-  const transferCount = Number.isFinite(transferData?.totalTransferCount)
-    ? transferData.totalTransferCount
-    : (Number.isFinite(counters?.transfers) ? counters.transfers : transfers.length);
+  const baseTransferCountCandidates = [transferData?.totalTransferCount, counters?.transfers, transfers.length].filter(Number.isFinite);
+  const transferCount = baseTransferCountCandidates.length ? Math.max(...baseTransferCountCandidates) : 0;
 
   return {
     holders: Number.isFinite(counters?.holders) ? counters.holders : null,
@@ -664,8 +722,8 @@ async function fetchBaseIndependentBundle() {
     transfers,
     transferCount,
     visibleTransferCount: transfers.length,
-    transferSource: transferData?.source || (Number.isFinite(counters?.transfers) ? counters.source : null),
-    transferSourceUrl: transferData?.sourceUrl || counters?.sourceUrl || BASESCAN_URL,
+    transferSource: counters?.transferSource || transferData?.source || (Number.isFinite(counters?.transfers) ? counters.source : null),
+    transferSourceUrl: counters?.transferSourceUrl || transferData?.sourceUrl || counters?.sourceUrl || BASESCAN_URL,
     warnings
   };
 }
@@ -742,9 +800,9 @@ export default async function handler(req, res) {
       baseToken: BASE_TOKEN
     },
     dataMode: {
-      mode: 'v16-fast-txn-fix',
+      mode: 'v17-official-txn-count',
       explorerApiKeyConfigured: Boolean(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY),
-      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Base totals and latest TXN rows load separately; TXN rows use a fast latest-row request.' : 'No valid ETHERSCAN_API_KEY detected. Base counts and Base transfers load separately; BaseScan link remains the official review source.'
+      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Holder totals, all-time TXN totals, and latest TXN rows load separately. TXN card uses all-time transfer counts, not latest-row count.' : 'No valid ETHERSCAN_API_KEY detected. Base counts and Base transfers load separately; BaseScan link remains the official review source.'
     },
     ethereum,
     base,
