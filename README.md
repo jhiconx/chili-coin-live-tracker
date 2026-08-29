@@ -1,27 +1,33 @@
-# Chili Coin Live Tracker — V13 BaseScan API Primary
+# Chili Coin Live Wallet Tracker — V14 BaseScan Official Counts
 
-This replacement removes the slow/hit-or-miss BaseScan page-scraping path from the live refresh loop.
+This release fixes the Base holder-count mismatch.
 
 ## What changed
 
-- Base loads from a public token indexer first, so Base does not wait on BaseScan HTML/text mirrors.
-- Automatic refresh now uses Vercel caching instead of forcing a new uncached server request every 20 seconds.
-- Manual **Refresh now** still bypasses cache.
-- The TXN table keeps using ERC-20 `from` as **Source Wallet** and ERC-20 `to` as **Recipient**.
-- BaseScan remains the official review link for Base transfers.
+- The Base holder card no longer uses Blockscout holder counters.
+- Base visible holder/transfer totals now use official BaseScan-style sources first:
+  1. Etherscan/BaseScan API, if `ETHERSCAN_API_KEY` is configured in Vercel.
+  2. BaseScan legacy token API fallbacks, if available.
+  3. BaseScan public token page text mirror.
+- If those official-style sources are unavailable, the Base holder number shows unavailable rather than displaying a wrong Blockscout count.
+- Blockscout can still be used for latest transfer rows if the API transaction feed fails, but not for the visible Base holder total.
 
-## Upload
+## Correct BaseScan comparison
 
-Upload all files and folders in this replacement folder to GitHub, including the `api` folder.
+Compare the site to this BaseScan page:
 
+`https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions`
 
-## V13 BaseScan/Etherscan API Primary
+On the tracker:
 
-This version fixes the Base holder mismatch caused by Blockscout fallback counters. When `ETHERSCAN_API_KEY` is configured in Vercel and the site is redeployed, the live API tries Etherscan API V2 first:
+- **Base Holders** should match BaseScan Overview → Holders when the official source is available.
+- **TXN** should include ETH + Base transfer-event totals.
+- The transaction table shows latest transfer rows and is not meant to list every historical transfer row on the page.
 
-- Ethereum: `chainid=1`
-- Base: `chainid=8453`
-- Holder count: `module=token&action=tokenholdercount`
-- ERC-20 transfers: `module=account&action=tokentx`
+## Deploy
 
-If the key is missing, invalid, or accidentally set to a non-Etherscan value such as `sk_live...`, the site will ignore it and use Blockscout fallback data. In that fallback mode, Base holder totals can lag BaseScan.
+Upload everything in this replacement folder to GitHub, including the `api` folder, then redeploy on Vercel.
+
+Commit message suggestion:
+
+`Fix Base holder count to use BaseScan official totals`

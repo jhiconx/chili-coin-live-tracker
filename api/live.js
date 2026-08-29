@@ -7,10 +7,10 @@ const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
 const BASESCAN_TOKEN_URL = `https://basescan.org/token/${BASE_TOKEN}`;
 
-// V13: BaseScan/Etherscan API key primary, Blockscout fallback.
-// V12 prioritized no-key stability, but Blockscout's Base holder counter can lag BaseScan badly.
-// This build uses Etherscan API V2 first when ETHERSCAN_API_KEY is set in Vercel.
-// If no valid key is present, it falls back to the public Blockscout indexer.
+// V14: BaseScan official-count primary for Base.
+// The Base card must not show Blockscout holder counters because Blockscout can lag BaseScan badly.
+// Base visible holder/transfer totals are now taken from Etherscan/BaseScan APIs first, then the BaseScan token page text mirror.
+// If the official BaseScan-style counts cannot be reached, Base shows unavailable instead of showing the wrong Blockscout number.
 const FAST_TIMEOUT_MS = 5_500;
 const EXPLORER_TIMEOUT_MS = 8_500;
 const BASESCAN_HINT_TIMEOUT_MS = 2_500;
@@ -226,10 +226,13 @@ function parseBaseScanTextCount(content, kind) {
   ];
   const transferPatterns = [
     /A\s+total\s+of\s+([\d,]+)\s+token\s+transfers?\s+found/i,
+    /A\s+total\s+of\s+([\d,]+)\s+transactions?\s+found/i,
     /A\s+total\s+of\s+([\d,]+)\s+transfers?\s+found/i,
     /([\d,]+)\s+token\s+transfers?\s+found/i,
+    /([\d,]+)\s+transactions?\s+found/i,
     /([\d,]+)\s+transfers?\s+found/i,
-    /\bTransfers\b\s*([\d,]+)/i
+    /\bTransfers\b\s*(?:Total\s*)?([\d,]+)/i,
+    /\bTransactions\b\s*(?:Total\s*)?([\d,]+)/i
   ];
   const patterns = kind === 'holders' ? holderPatterns : transferPatterns;
   for (const source of [plain, raw]) {
@@ -243,22 +246,105 @@ function parseBaseScanTextCount(content, kind) {
   return null;
 }
 
-async function fetchBaseScanHint() {
-  // Optional short-running hint only. It is never allowed to block the main dashboard.
+function getManualNumber(name) {
+  const value = process.env[name];
+  const parsed = asNumber(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function fetchBaseScanPageSummary(timeoutMs = 12_000) {
+  // Jina Reader converts the public BaseScan token page to readable text.
+  // This is slower than an API call, so Vercel caches the server response; but it matches the public BaseScan overview when API holder count is unavailable.
+  const url = `https://r.jina.ai/${BASESCAN_TOKEN_URL}`;
+  const response = await fetchWithTimeout(url, {
+    headers: {
+      accept: 'text/plain, text/markdown, */*',
+      'x-respond-with': 'text',
+      'x-no-cache': 'true'
+    }
+  }, timeoutMs);
+  if (!response.ok) throw new Error(`BaseScan text mirror HTTP ${response.status}`);
+  const content = await response.text();
+  const holders = parseBaseScanTextCount(content, 'holders');
+  const transfers = parseBaseScanTextCount(content, 'transfers');
+  if (!Number.isFinite(holders) && !Number.isFinite(transfers)) throw new Error('BaseScan text mirror did not expose holder or transfer totals');
+  return {
+    holders,
+    transfers,
+    source: 'BaseScan token page via text mirror',
+    sourceUrl: BASESCAN_TOKEN_URL
+  };
+}
+
+async function fetchBaseScanLegacyTokenInfo(timeoutMs = EXPLORER_TIMEOUT_MS) {
+  const apiKey = getExplorerApiKey();
+  if (!apiKey) throw new Error('No valid BaseScan/Etherscan API key configured');
+  const url = new URL('https://api.basescan.org/api');
+  url.searchParams.set('module', 'token');
+  url.searchParams.set('action', 'tokeninfo');
+  url.searchParams.set('contractaddress', BASE_TOKEN);
+  url.searchParams.set('apikey', apiKey);
+  const data = await fetchJson(url.toString(), timeoutMs);
+  if (data.status !== '1' || !Array.isArray(data.result) || !data.result.length) throw new Error(data.result || data.message || 'BaseScan tokeninfo failed');
+  const info = data.result[0] || {};
+  const holders = asNumber(info.holders ?? info.tokenHolders ?? info.token_holders ?? info.holderCount ?? info.holdersCount);
+  const transfers = asNumber(info.transfers ?? info.tokenTransfers ?? info.transferCount ?? info.transfersCount);
+  if (!Number.isFinite(holders) && !Number.isFinite(transfers)) throw new Error('BaseScan tokeninfo did not return holder/transfer totals');
+  return { holders, transfers, source: 'BaseScan API tokeninfo', sourceUrl: BASESCAN_TOKEN_URL };
+}
+
+async function fetchBaseScanLegacyHolderListCount(timeoutMs = EXPLORER_TIMEOUT_MS * 2) {
+  const apiKey = getExplorerApiKey();
+  if (!apiKey) throw new Error('No valid BaseScan/Etherscan API key configured');
+  const url = new URL('https://api.basescan.org/api');
+  url.searchParams.set('module', 'token');
+  url.searchParams.set('action', 'tokenholderlist');
+  url.searchParams.set('contractaddress', BASE_TOKEN);
+  url.searchParams.set('page', '1');
+  url.searchParams.set('offset', '10000');
+  url.searchParams.set('apikey', apiKey);
+  const data = await fetchJson(url.toString(), timeoutMs);
+  if (data.status !== '1' || !Array.isArray(data.result)) throw new Error(data.result || data.message || 'BaseScan tokenholderlist failed');
+  return {
+    holders: data.result.length,
+    transfers: null,
+    source: data.result.length >= 10000 ? 'BaseScan API tokenholderlist capped count' : 'BaseScan API tokenholderlist count',
+    sourceUrl: BASESCAN_TOKEN_URL
+  };
+}
+
+async function fetchBaseOfficialCounters() {
+  const manualHolders = getManualNumber('BASESCAN_BASE_HOLDERS');
+  const manualTransfers = getManualNumber('BASESCAN_BASE_TRANSFERS');
+  if (Number.isFinite(manualHolders) || Number.isFinite(manualTransfers)) {
+    return {
+      holders: manualHolders,
+      transfers: manualTransfers,
+      source: 'Configured BaseScan official count override',
+      sourceUrl: BASESCAN_TOKEN_URL
+    };
+  }
+
   const attempts = [
-    `https://r.jina.ai/http://r.jina.ai/http://` // impossible sentinel; kept out by filter below
-  ].filter(() => false);
-  const urls = [
-    `https://r.jina.ai/http://r.jina.ai/http://example.invalid`,
+    () => fetchEtherscanHolderCount(chainConfigs.base),
+    () => fetchBaseScanLegacyTokenInfo(),
+    () => fetchBaseScanLegacyHolderListCount(),
+    () => fetchBaseScanPageSummary()
   ];
-  // Use a single real text-mirror URL. If it fails quickly, ignore it.
-  const mirror = `https://r.jina.ai/http://r.jina.ai/http://example.invalid`;
-  const url = `https://r.jina.ai/http://r.jina.ai/http://example.invalid`;
-  // Jina accepts https://r.jina.ai/http://example.com and https://r.jina.ai/http://r.jina.ai/http:// is not correct.
-  const realUrl = `https://r.jina.ai/http://r.jina.ai/http://example.invalid`;
-  void attempts; void urls; void mirror; void url; void realUrl;
-  // Disable BaseScan text mirror in the live path because it caused the slow/hit-miss behavior.
-  // The BaseScan link remains on the page as the review source.
+  const errors = [];
+  for (const attempt of attempts) {
+    try {
+      const result = await attempt();
+      if (Number.isFinite(result?.holders) || Number.isFinite(result?.transfers)) return result;
+    } catch (error) {
+      errors.push(error?.message || String(error));
+    }
+  }
+  throw new Error(`No BaseScan official-count source returned data: ${errors.join(' | ')}`);
+}
+
+async function fetchBaseScanHint() {
+  // Kept for response-shape compatibility. Base official counts are now fetched inside fetchBaseOfficialCounters().
   return null;
 }
 
@@ -413,6 +499,12 @@ async function fetchChainBundle(chain) {
   let token = null;
   let transferData = null;
 
+  if (chain.key === 'base') {
+    const officialCountersResult = await settleWithTimeout(fetchBaseOfficialCounters(), 14_000, 'BaseScan official holder/transfer totals');
+    if (officialCountersResult.status === 'fulfilled') counters = officialCountersResult.value;
+    else warnings.push(`BaseScan official counts unavailable: ${officialCountersResult.reason?.message || 'unknown error'}`);
+  }
+
   if (apiKeyConfigured) {
     const [holderResult, transfersResult, tokenResult] = await Promise.all([
       settleWithTimeout(fetchEtherscanHolderCount(chain), EXPLORER_TIMEOUT_MS, `${chain.label} Etherscan holder count`),
@@ -432,7 +524,7 @@ async function fetchChainBundle(chain) {
 
   if (!counters || !transferData) {
     const [countersResult, tokenResult, transfersResult] = await Promise.all([
-      !counters ? settleWithTimeout(fetchCounters(chain), FAST_TIMEOUT_MS, `${chain.label} Blockscout counters`) : Promise.resolve({ status: 'fulfilled', value: counters }),
+      !counters && chain.key !== 'base' ? settleWithTimeout(fetchCounters(chain), FAST_TIMEOUT_MS, `${chain.label} Blockscout counters`) : Promise.resolve(counters ? { status: 'fulfilled', value: counters } : { status: 'rejected', reason: new Error('Base Blockscout holder counters disabled to avoid BaseScan mismatch') }),
       !token ? settleWithTimeout(fetchTokenInfo(chain), FAST_TIMEOUT_MS, `${chain.label} token metadata`) : Promise.resolve({ status: 'fulfilled', value: token }),
       !transferData ? settleWithTimeout(fetchTokenTransfers(chain), FAST_TIMEOUT_MS * 2, `${chain.label} Blockscout transfer rows`) : Promise.resolve({ status: 'fulfilled', value: transferData })
     ]);
@@ -493,7 +585,7 @@ export default async function handler(req, res) {
   const warnings = [];
   const rawExplorerKey = String(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY || '').trim();
   if (rawExplorerKey && /^sk_live/i.test(rawExplorerKey)) warnings.push('A value is present for ETHERSCAN_API_KEY/BASESCAN_API_KEY, but it looks like a non-Etherscan secret key. The tracker ignored it and used fallback data.');
-  if (!rawExplorerKey) warnings.push('No ETHERSCAN_API_KEY is visible to this deployment. Base holder count is using fallback data.');
+  if (!rawExplorerKey) warnings.push('No ETHERSCAN_API_KEY is visible to this deployment. Base holder count uses BaseScan public page text if available; Blockscout holder counters are not used for the visible Base total.');
   if (ethereumResult.status === 'rejected') warnings.push(`Ethereum bundle unavailable: ${ethereumResult.reason?.message || 'unknown error'}`);
   if (baseResult.status === 'rejected') warnings.push(`Base bundle unavailable: ${baseResult.reason?.message || 'unknown error'}`);
   if (baseScanHintResult.status === 'rejected') warnings.push(`BaseScan optional hint skipped: ${baseScanHintResult.reason?.message || 'unknown error'}`);
@@ -543,9 +635,9 @@ export default async function handler(req, res) {
       baseToken: BASE_TOKEN
     },
     dataMode: {
-      mode: 'v13-basescan-api-primary',
+      mode: 'v14-basescan-official-counts',
       explorerApiKeyConfigured: Boolean(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY),
-      note: getExplorerApiKey() ? 'Etherscan API V2 is active. Base uses chainid=8453 for holder count and ERC-20 transfer events, with Blockscout fallback only if the API call fails.' : 'No valid ETHERSCAN_API_KEY detected. The dashboard is using public Blockscout fallback data, which can lag BaseScan holder totals.'
+      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Base visible totals use official BaseScan-style sources first; Base Blockscout holder counters are disabled.' : 'No valid ETHERSCAN_API_KEY detected. Base visible totals use the BaseScan public token page text mirror if available; Base Blockscout holder counters are disabled to avoid wrong Base totals.'
     },
     ethereum,
     base,

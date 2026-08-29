@@ -1,14 +1,28 @@
-# Source Notes — V12
+# Source Notes — V14
 
-The previous no-key BaseScan text mirror helped match displayed BaseScan counts when it worked, but it caused slow or failed dashboard loads. V12 prioritizes uptime and speed:
+## Contracts
 
-- Ethereum counters/transfers: Ethereum Blockscout public indexer
-- Base counters/transfers: Base Blockscout public indexer
-- BaseScan: linked as the official review page, not blocking the live dashboard
+Ethereum CHI ERC-20:
+`0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`
 
-This means the dashboard should load faster and more consistently, but explorer/indexer counts can differ from BaseScan at a given moment.
+Base CHI ERC-20:
+`0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
 
+## Base count policy
 
-## V13 correction
+Earlier builds showed Base Blockscout holder counters when BaseScan/Etherscan sources failed. That produced mismatches against BaseScan. V14 disables Blockscout holder counters for the visible Base holder total.
 
-Base holders should not rely on Blockscout counters when exact BaseScan alignment is required. V13 uses the Etherscan API V2 endpoint first when `ETHERSCAN_API_KEY` is available in Vercel. Base is queried with `chainid=8453`. If the UI still says "Base Blockscout token counters," the production deployment is not seeing a valid Etherscan API key or has not been redeployed after the environment variable was added.
+V14 attempts Base visible totals in this order:
+
+1. Etherscan V2 / BaseScan API using `ETHERSCAN_API_KEY` and Base `chainid=8453`.
+2. Legacy BaseScan token endpoints where available.
+3. BaseScan token page text mirror for the overview counts.
+4. Optional emergency environment overrides:
+   - `BASESCAN_BASE_HOLDERS`
+   - `BASESCAN_BASE_TRANSFERS`
+
+If none of those are available, the site shows an unavailable Base total instead of a wrong Blockscout Base holder number.
+
+## Transfer rows
+
+The table records are latest indexed ERC-20 transfer events. Source Wallet is the ERC-20 `from` wallet and Recipient is the ERC-20 `to` wallet.
