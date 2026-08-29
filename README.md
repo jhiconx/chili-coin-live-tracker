@@ -36,3 +36,8 @@ Commit message suggestion:
 ## V15 update
 
 Base holder counts and Base transfer rows now load as separate requests. A slow Base holder count can no longer block Base CHI transfer rows, and Base Blockscout holder counters are not used for the visible Base holder total.
+
+
+## V16 Fast TXN Fix
+
+This update keeps Base holder totals and Base transfer totals separate from the latest transaction-table rows. The TXN table now requests a smaller latest-row page from the Etherscan/BaseScan API so the table is less likely to time out, while the top TXN card can still use the official BaseScan-style all-time transfer count.

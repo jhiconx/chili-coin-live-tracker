@@ -7,14 +7,15 @@ const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
 const BASESCAN_TOKEN_URL = `https://basescan.org/token/${BASE_TOKEN}`;
 
-// V14: BaseScan official-count primary for Base.
-// The Base card must not show Blockscout holder counters because Blockscout can lag BaseScan badly.
-// Base visible holder/transfer totals are now taken from Etherscan/BaseScan APIs first, then the BaseScan token page text mirror.
-// If the official BaseScan-style counts cannot be reached, Base shows unavailable instead of showing the wrong Blockscout number.
+// V16: stable split Base + fast transaction rows.
+// Base holder and transfer totals are loaded separately from visible transaction rows.
+// The transaction table asks Etherscan/BaseScan for a small latest-row page, not a huge all-time page, so TXN rows do not time out.
+// The TXN card uses official BaseScan-style total counts when available, while the table shows only recent rows.
 const FAST_TIMEOUT_MS = 5_500;
 const EXPLORER_TIMEOUT_MS = 8_500;
 const BASESCAN_HINT_TIMEOUT_MS = 2_500;
 const TABLE_RECORD_LIMIT = 300;
+const TX_ROW_OFFSET = 300;
 const TRANSFER_PAGES = 3;
 
 const chainConfigs = {
@@ -158,7 +159,7 @@ function normalizeEtherscanTokenTx(item, chain) {
 }
 
 async function fetchEtherscanTokenTransfers(chain) {
-  const offset = 10000;
+  const offset = TX_ROW_OFFSET;
   const result = await fetchEtherscanV2({
     chainid: chainIdFor(chain),
     module: 'account',
@@ -184,8 +185,10 @@ async function fetchEtherscanTokenTransfers(chain) {
   return {
     transfers,
     visibleTransferCount: transfers.length,
-    totalTransferCount: items.length,
-    source: `${chain.label} Etherscan API ERC-20 tokentx`,
+    // If we hit the requested row limit, the explorer has more rows than we loaded.
+    // Leave totalTransferCount null so the card can use the separate official transfer total.
+    totalTransferCount: items.length < offset ? items.length : null,
+    source: `${chain.label} Etherscan API ERC-20 tokentx latest rows`,
     sourceUrl: chain.transferExplorer,
     capped: items.length >= offset
   };
@@ -739,9 +742,9 @@ export default async function handler(req, res) {
       baseToken: BASE_TOKEN
     },
     dataMode: {
-      mode: 'v15-split-base-calls',
+      mode: 'v16-fast-txn-fix',
       explorerApiKeyConfigured: Boolean(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY),
-      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Base counts and Base transfers load separately so one slow source does not kill the other.' : 'No valid ETHERSCAN_API_KEY detected. Base counts and Base transfers load separately; BaseScan link remains the official review source.'
+      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Base totals and latest TXN rows load separately; TXN rows use a fast latest-row request.' : 'No valid ETHERSCAN_API_KEY detected. Base counts and Base transfers load separately; BaseScan link remains the official review source.'
     },
     ethereum,
     base,
