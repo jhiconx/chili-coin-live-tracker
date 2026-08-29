@@ -1,4 +1,4 @@
-# Chili Coin Live Wallet Tracker — V14 BaseScan Official Counts
+# Chili Coin Live Wallet Tracker — V15 Split Base Calls
 
 This release fixes the Base holder-count mismatch.
 
@@ -31,3 +31,8 @@ Upload everything in this replacement folder to GitHub, including the `api` fold
 Commit message suggestion:
 
 `Fix Base holder count to use BaseScan official totals`
+
+
+## V15 update
+
+Base holder counts and Base transfer rows now load as separate requests. A slow Base holder count can no longer block Base CHI transfer rows, and Base Blockscout holder counters are not used for the visible Base holder total.

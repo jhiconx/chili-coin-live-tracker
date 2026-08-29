@@ -563,6 +563,110 @@ async function fetchChainBundle(chain) {
   };
 }
 
+
+async function fetchBaseOfficialCountersFast() {
+  const manualHolders = getManualNumber('BASESCAN_BASE_HOLDERS');
+  const manualTransfers = getManualNumber('BASESCAN_BASE_TRANSFERS');
+  if (Number.isFinite(manualHolders) || Number.isFinite(manualTransfers)) {
+    return {
+      holders: manualHolders,
+      transfers: manualTransfers,
+      source: 'Configured BaseScan official count override',
+      sourceUrl: BASESCAN_TOKEN_URL
+    };
+  }
+
+  const attempts = [
+    settleWithTimeout(fetchEtherscanHolderCount(chainConfigs.base), 4_500, 'Base Etherscan tokenholdercount'),
+    settleWithTimeout(fetchBaseScanLegacyTokenInfo(4_500), 4_500, 'BaseScan tokeninfo'),
+    settleWithTimeout(fetchBaseScanLegacyHolderListCount(6_500), 6_500, 'BaseScan tokenholderlist'),
+    settleWithTimeout(fetchBaseScanPageSummary(8_000), 8_000, 'BaseScan token page text mirror')
+  ];
+  const results = await Promise.all(attempts);
+  const fulfilled = results
+    .filter(result => result.status === 'fulfilled' && result.value && (Number.isFinite(result.value.holders) || Number.isFinite(result.value.transfers)))
+    .map(result => result.value);
+
+  if (fulfilled.length) {
+    fulfilled.sort((a, b) => {
+      const score = value => (Number.isFinite(value.holders) ? 2 : 0) + (Number.isFinite(value.transfers) ? 1 : 0);
+      return score(b) - score(a);
+    });
+    return fulfilled[0];
+  }
+
+  const errors = results
+    .filter(result => result.status === 'rejected')
+    .map(result => result.reason?.message || String(result.reason));
+  throw new Error(`Base official counts unavailable: ${errors.join(' | ')}`);
+}
+
+async function fetchBaseTransfersFast() {
+  const attempts = [];
+  if (getExplorerApiKey()) {
+    attempts.push(settleWithTimeout(fetchEtherscanTokenTransfers(chainConfigs.base), 7_500, 'Base Etherscan tokentx'));
+  }
+  attempts.push(settleWithTimeout(fetchTokenTransfers(chainConfigs.base, 2), 5_500, 'Base public transfer rows'));
+
+  const results = await Promise.all(attempts);
+  const etherscanResult = results.find(result =>
+    result.status === 'fulfilled' &&
+    result.value &&
+    String(result.value.source || '').toLowerCase().includes('etherscan') &&
+    (Array.isArray(result.value.transfers) || Number.isFinite(result.value.totalTransferCount))
+  );
+  if (etherscanResult) return etherscanResult.value;
+
+  const anyTransferResult = results.find(result =>
+    result.status === 'fulfilled' &&
+    result.value &&
+    Array.isArray(result.value.transfers)
+  );
+  if (anyTransferResult) return anyTransferResult.value;
+
+  const errors = results
+    .filter(result => result.status === 'rejected')
+    .map(result => result.reason?.message || String(result.reason));
+  throw new Error(`Base transfer feed unavailable: ${errors.join(' | ')}`);
+}
+
+async function fetchBaseIndependentBundle() {
+  const warnings = [];
+  const [countersResult, transfersResult, tokenResult] = await Promise.all([
+    settleWithTimeout(fetchBaseOfficialCountersFast(), 8_500, 'Base official counts'),
+    settleWithTimeout(fetchBaseTransfersFast(), 8_500, 'Base token transfers'),
+    settleWithTimeout(fetchTokenInfo(chainConfigs.base), 4_500, 'Base token metadata')
+  ]);
+
+  const counters = countersResult.status === 'fulfilled' ? countersResult.value : null;
+  const transferData = transfersResult.status === 'fulfilled' ? transfersResult.value : null;
+  const token = tokenResult.status === 'fulfilled' ? tokenResult.value : null;
+
+  if (countersResult.status === 'rejected') warnings.push(`Base official counts unavailable: ${countersResult.reason?.message || 'unknown error'}`);
+  if (transfersResult.status === 'rejected') warnings.push(`Base token transfers unavailable: ${transfersResult.reason?.message || 'unknown error'}`);
+  if (tokenResult.status === 'rejected') warnings.push(`Base token metadata unavailable: ${tokenResult.reason?.message || 'unknown error'}`);
+
+  const transfers = Array.isArray(transferData?.transfers) ? transferData.transfers : [];
+  const transferCount = Number.isFinite(transferData?.totalTransferCount)
+    ? transferData.totalTransferCount
+    : (Number.isFinite(counters?.transfers) ? counters.transfers : transfers.length);
+
+  return {
+    holders: Number.isFinite(counters?.holders) ? counters.holders : null,
+    holderSource: counters?.source || null,
+    holderSourceUrl: counters?.sourceUrl || BASESCAN_TOKEN_URL,
+    explorerUrl: BASESCAN_URL,
+    transferExplorerUrl: BASESCAN_URL,
+    token,
+    transfers,
+    transferCount,
+    visibleTransferCount: transfers.length,
+    transferSource: transferData?.source || (Number.isFinite(counters?.transfers) ? counters.source : null),
+    transferSourceUrl: transferData?.sourceUrl || counters?.sourceUrl || BASESCAN_URL,
+    warnings
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -578,7 +682,7 @@ export default async function handler(req, res) {
   const fetchedAt = new Date().toISOString();
   const [ethereumResult, baseResult, baseScanHintResult] = await Promise.all([
     settleWithTimeout(fetchChainBundle(chainConfigs.ethereum), FAST_TIMEOUT_MS * 2, 'Ethereum bundle'),
-    settleWithTimeout(fetchChainBundle(chainConfigs.base), FAST_TIMEOUT_MS * 2, 'Base bundle'),
+    settleWithTimeout(fetchBaseIndependentBundle(), 9_000, 'Base independent bundle'),
     settleWithTimeout(fetchBaseScanHint(), BASESCAN_HINT_TIMEOUT_MS, 'BaseScan optional hint')
   ]);
 
@@ -635,9 +739,9 @@ export default async function handler(req, res) {
       baseToken: BASE_TOKEN
     },
     dataMode: {
-      mode: 'v14-basescan-official-counts',
+      mode: 'v15-split-base-calls',
       explorerApiKeyConfigured: Boolean(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY),
-      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Base visible totals use official BaseScan-style sources first; Base Blockscout holder counters are disabled.' : 'No valid ETHERSCAN_API_KEY detected. Base visible totals use the BaseScan public token page text mirror if available; Base Blockscout holder counters are disabled to avoid wrong Base totals.'
+      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Base counts and Base transfers load separately so one slow source does not kill the other.' : 'No valid ETHERSCAN_API_KEY detected. Base counts and Base transfers load separately; BaseScan link remains the official review source.'
     },
     ethereum,
     base,
