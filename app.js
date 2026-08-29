@@ -275,19 +275,21 @@ async function loadLiveData({ manual = false } = {}) {
   state.loading = true;
   if (manual) setRefreshButton({ loading: true });
   if (manual || !state.data) setConnection('loading', 'Refreshing live sources…');
+  else setConnection('loading', 'Refreshing in background…');
   if (elements.activityStatus && manual) elements.activityStatus.textContent = 'Refreshing all-chain CHI transactions…';
 
   try {
-    const params = new URLSearchParams({ t: String(Date.now()) });
-    if (manual) params.set('force', '1');
+    const params = new URLSearchParams();
+    if (manual) {
+      params.set('force', '1');
+      params.set('t', String(Date.now()));
+    }
 
-    const response = await fetch(`${API_URL}?${params.toString()}`, {
+    const apiTarget = params.toString() ? `${API_URL}?${params.toString()}` : API_URL;
+    const response = await fetch(apiTarget, {
       method: 'GET',
-      headers: {
-        accept: 'application/json',
-        'cache-control': 'no-cache'
-      },
-      cache: 'no-store'
+      headers: { accept: 'application/json' },
+      cache: manual ? 'no-store' : 'default'
     });
 
     if (!response.ok) throw new Error(`Live endpoint returned HTTP ${response.status}`);

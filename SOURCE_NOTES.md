@@ -1,15 +1,9 @@
-# Source Notes — V11
+# Source Notes — V12
 
-Base CHI contract:
-`0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
+The previous no-key BaseScan text mirror helped match displayed BaseScan counts when it worked, but it caused slow or failed dashboard loads. V12 prioritizes uptime and speed:
 
-Ethereum CHI contract:
-`0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`
+- Ethereum counters/transfers: Ethereum Blockscout public indexer
+- Base counters/transfers: Base Blockscout public indexer
+- BaseScan: linked as the official review page, not blocking the live dashboard
 
-The tracker now uses a no-key source order for Base:
-
-1. Public BaseScan token page/text mirror for displayed holder and transfer totals.
-2. Blockscout public API counters as fallback.
-3. Blockscout public token-transfer feed for latest rows.
-
-Important: BaseScan's `#transactions` tab shows token transfer events. That number is not the same thing as holder count. The tracker separates Base Holders from TXN / All Chain Transactions.
+This means the dashboard should load faster and more consistently, but explorer/indexer counts can differ from BaseScan at a given moment.

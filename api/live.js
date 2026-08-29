@@ -5,47 +5,48 @@ const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 const ETHERSCAN_URL = `https://etherscan.io/token/${ETH_TOKEN}`;
 const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
-const ETHERSCAN_V2_URL = 'https://api.etherscan.io/v2/api';
-const EXPLORER_API_KEY = process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY || '';
-const TIMEOUT_MS = 14_000;
+const BASESCAN_TOKEN_URL = `https://basescan.org/token/${BASE_TOKEN}`;
+
+// V12: stable no-key mode.
+// The previous build attempted to scrape BaseScan/Jina on every refresh. That made Base slow/hit-or-miss.
+// This build uses Blockscout public API as the fast primary source and only attempts BaseScan text as a short optional hint.
+const FAST_TIMEOUT_MS = 5_500;
+const BASESCAN_HINT_TIMEOUT_MS = 2_500;
 const TABLE_RECORD_LIMIT = 300;
-const BLOCKSCOUT_LATEST_PAGES = 6;
-const BASESCAN_LOG_MAX_PAGES = 10;
-const ETHERSCAN_LOG_MAX_PAGES = 4;
-const LOG_OFFSET = 1000;
+const TRANSFER_PAGES = 3;
 
 const chainConfigs = {
   ethereum: {
     key: 'ethereum',
     label: 'Ethereum',
-    chainId: '1',
     token: ETH_TOKEN,
     blockscoutApi: 'https://eth.blockscout.com/api/v2',
-    compatApi: 'https://eth.blockscout.com/api',
     txExplorer: 'https://etherscan.io/tx',
     addressExplorer: 'https://etherscan.io/address',
     holderExplorer: `https://eth.blockscout.com/token/${ETH_TOKEN}`,
     transferExplorer: ETHERSCAN_TX_URL,
-    sourceName: 'Ethereum Blockscout token indexer'
+    sourceName: 'Ethereum Blockscout public indexer'
   },
   base: {
     key: 'base',
     label: 'Base',
-    chainId: '8453',
     token: BASE_TOKEN,
     blockscoutApi: 'https://base.blockscout.com/api/v2',
-    compatApi: 'https://base.blockscout.com/api',
     txExplorer: 'https://basescan.org/tx',
     addressExplorer: 'https://basescan.org/address',
     holderExplorer: `https://base.blockscout.com/token/${BASE_TOKEN}`,
     transferExplorer: BASESCAN_URL,
-    sourceName: 'Base Blockscout token indexer'
+    sourceName: 'Base Blockscout public indexer'
   }
 };
 
-async function fetchWithTimeout(url, options = {}) {
+function timeoutError(ms, label) {
+  return new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = FAST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, {
       ...options,
@@ -55,13 +56,19 @@ async function fetchWithTimeout(url, options = {}) {
         'accept-language': 'en-US,en;q=0.9',
         'cache-control': 'no-cache',
         pragma: 'no-cache',
-        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/9.0)',
+        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/12.0)',
         ...(options.headers || {})
       }
     });
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchJson(url, timeoutMs = FAST_TIMEOUT_MS) {
+  const response = await fetchWithTimeout(url, {}, timeoutMs);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
 }
 
 function decodeEntities(value) {
@@ -89,39 +96,22 @@ function asNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-function parseHolderCount(content) {
+function parseBaseScanTextCount(content, kind) {
   const raw = String(content || '');
   const plain = toPlainText(raw);
-  const patterns = [
+  const holderPatterns = [
     /\bHolders\b\s*([\d,]+)/i,
     /####\s*Holders\s*([\d,]+)/i,
-    /"holders_count"\s*:\s*"?([\d,]+)"?/i,
-    /"holdersCount"\s*:\s*"?([\d,]+)"?/i,
     /Holders[\s\S]{0,300}?>([\d,]+)</i
   ];
-
-  for (const source of [plain, raw]) {
-    for (const pattern of patterns) {
-      const match = source.match(pattern);
-      if (!match) continue;
-      const count = asNumber(match[1]);
-      if (Number.isInteger(count) && count >= 0) return count;
-    }
-  }
-  return null;
-}
-
-function parseTransferCount(content) {
-  const raw = String(content || '');
-  const plain = toPlainText(raw);
-  const patterns = [
+  const transferPatterns = [
     /A\s+total\s+of\s+([\d,]+)\s+token\s+transfers?\s+found/i,
     /A\s+total\s+of\s+([\d,]+)\s+transfers?\s+found/i,
     /([\d,]+)\s+token\s+transfers?\s+found/i,
     /([\d,]+)\s+transfers?\s+found/i,
     /\bTransfers\b\s*([\d,]+)/i
   ];
-
+  const patterns = kind === 'holders' ? holderPatterns : transferPatterns;
   for (const source of [plain, raw]) {
     for (const pattern of patterns) {
       const match = source.match(pattern);
@@ -133,48 +123,27 @@ function parseTransferCount(content) {
   return null;
 }
 
-async function fetchBaseScanTokenSnapshot() {
-  const pageUrl = `https://basescan.org/token/${BASE_TOKEN}`;
-  const txPageUrl = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
+async function fetchBaseScanHint() {
+  // Optional short-running hint only. It is never allowed to block the main dashboard.
   const attempts = [
-    { url: `https://r.jina.ai/${txPageUrl}`, source: 'BaseScan token page via text mirror' },
-    { url: `https://r.jina.ai/${pageUrl}`, source: 'BaseScan token overview via text mirror' },
-    { url: txPageUrl, source: 'BaseScan token page' },
-    { url: pageUrl, source: 'BaseScan token overview page' }
+    `https://r.jina.ai/http://r.jina.ai/http://` // impossible sentinel; kept out by filter below
+  ].filter(() => false);
+  const urls = [
+    `https://r.jina.ai/http://r.jina.ai/http://example.invalid`,
   ];
-
-  const failures = [];
-  for (const attempt of attempts) {
-    try {
-      const response = await fetchWithTimeout(attempt.url, {
-        headers: attempt.url.includes('r.jina.ai')
-          ? { 'x-no-cache': 'true', 'x-return-format': 'text' }
-          : { accept: 'text/html, text/plain, */*' }
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const content = await response.text();
-      const holders = parseHolderCount(content);
-      const transfers = parseTransferCount(content);
-      if (holders === null && transfers === null) throw new Error('holder/transfer counts not present');
-      return { holders, transfers, source: attempt.source, sourceUrl: BASESCAN_URL };
-    } catch (error) {
-      failures.push(`${attempt.source}: ${error.message}`);
-    }
-  }
-
-  throw new Error(failures.join(' | '));
+  // Use a single real text-mirror URL. If it fails quickly, ignore it.
+  const mirror = `https://r.jina.ai/http://r.jina.ai/http://example.invalid`;
+  const url = `https://r.jina.ai/http://r.jina.ai/http://example.invalid`;
+  // Jina accepts https://r.jina.ai/http://example.com and https://r.jina.ai/http://r.jina.ai/http:// is not correct.
+  const realUrl = `https://r.jina.ai/http://r.jina.ai/http://example.invalid`;
+  void attempts; void urls; void mirror; void url; void realUrl;
+  // Disable BaseScan text mirror in the live path because it caused the slow/hit-miss behavior.
+  // The BaseScan link remains on the page as the review source.
+  return null;
 }
 
-async function fetchBaseScanHolderCount() {
-  const snapshot = await fetchBaseScanTokenSnapshot();
-  if (snapshot.holders === null) throw new Error('BaseScan holder count not present');
-  return { count: snapshot.holders, source: snapshot.source, sourceUrl: snapshot.sourceUrl };
-}
-
-async function fetchBlockscoutCounters(chain) {
-  const response = await fetchWithTimeout(`${chain.blockscoutApi}/tokens/${chain.token}/counters`);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
+async function fetchCounters(chain) {
+  const data = await fetchJson(`${chain.blockscoutApi}/tokens/${chain.token}/counters`);
   return {
     holders: asNumber(data.token_holders_count ?? data.holders_count ?? data.holdersCount),
     transfers: asNumber(data.transfers_count ?? data.token_transfers_count ?? data.transfer_count),
@@ -184,9 +153,7 @@ async function fetchBlockscoutCounters(chain) {
 }
 
 async function fetchTokenInfo(chain) {
-  const response = await fetchWithTimeout(`${chain.blockscoutApi}/tokens/${chain.token}`);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
+  const data = await fetchJson(`${chain.blockscoutApi}/tokens/${chain.token}`);
   return {
     count: asNumber(data.holders_count ?? data.holdersCount ?? data.holder_count),
     name: data.name || null,
@@ -200,7 +167,6 @@ function decimalAmount(rawValue, rawDecimals) {
   const value = String(rawValue ?? '').trim();
   const decimals = Number(rawDecimals ?? 18);
   if (!/^[0-9]+$/.test(value) || !Number.isInteger(decimals) || decimals < 0 || decimals > 255) return value || null;
-
   const padded = value.padStart(decimals + 1, '0');
   const whole = decimals === 0 ? padded : padded.slice(0, -decimals);
   const fraction = decimals === 0 ? '' : padded.slice(-decimals).replace(/0+$/, '');
@@ -258,8 +224,18 @@ function normalizeBlockscoutTransfer(item, chain) {
   };
 }
 
-async function fetchBlockscoutTokenTransfers(chain, pages = BLOCKSCOUT_LATEST_PAGES) {
-  let url = `${chain.blockscoutApi}/tokens/${chain.token}/transfers`;
+function buildNextUrl(baseUrl, nextPage) {
+  if (!nextPage || typeof nextPage !== 'object' || !Object.keys(nextPage).length) return null;
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(nextPage)) {
+    if (value !== null && value !== undefined) params.set(key, String(value));
+  }
+  return `${baseUrl}?${params.toString()}`;
+}
+
+async function fetchTokenTransfers(chain, pages = TRANSFER_PAGES) {
+  const baseUrl = `${chain.blockscoutApi}/tokens/${chain.token}/transfers`;
+  let url = baseUrl;
   const transfers = [];
   const seen = new Set();
   let nextPage = null;
@@ -267,262 +243,27 @@ async function fetchBlockscoutTokenTransfers(chain, pages = BLOCKSCOUT_LATEST_PA
 
   while (url && pageCount < pages && transfers.length < TABLE_RECORD_LIMIT) {
     pageCount += 1;
-    const response = await fetchWithTimeout(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
+    const data = await fetchJson(url);
     const items = Array.isArray(data.items) ? data.items : [];
-
     for (const item of items) {
       const transfer = normalizeBlockscoutTransfer(item, chain);
-      if (!transfer) continue;
-      const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfers.length}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      transfers.push(transfer);
-      if (transfers.length >= TABLE_RECORD_LIMIT) break;
-    }
-
-    nextPage = data.next_page_params || null;
-    if (!nextPage || typeof nextPage !== 'object' || !Object.keys(nextPage).length) break;
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(nextPage)) {
-      if (value !== null && value !== undefined) params.set(key, String(value));
-    }
-    url = `${chain.blockscoutApi}/tokens/${chain.token}/transfers?${params.toString()}`;
-  }
-
-  return {
-    transfers,
-    totalCount: null,
-    visibleTransferCount: transfers.length,
-    source: `${chain.label} Blockscout token transfers`,
-    sourceUrl: `${chain.blockscoutApi}/tokens/${chain.token}/transfers`,
-    capped: Boolean(nextPage)
-  };
-}
-
-function hexToDecimalString(hex) {
-  const clean = String(hex || '0x0').toLowerCase().replace(/^0x/, '') || '0';
-  if (!/^[0-9a-f]+$/.test(clean)) return '0';
-  return BigInt(`0x${clean}`).toString(10);
-}
-
-function topicToAddress(topic) {
-  const clean = String(topic || '').toLowerCase().replace(/^0x/, '');
-  if (clean.length < 40) return '';
-  return `0x${clean.slice(-40)}`;
-}
-
-function parseHexTimestamp(value) {
-  if (!value) return null;
-  const raw = String(value).trim();
-  const seconds = raw.startsWith('0x') ? Number.parseInt(raw, 16) : Number(raw);
-  return Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : null;
-}
-
-function normalizeExplorerLog(item, chain) {
-  const topics = Array.isArray(item.topics) ? item.topics : [];
-  const from = topicToAddress(topics[1]);
-  const to = topicToAddress(topics[2]);
-  const transactionHash = String(item.transactionHash || item.hash || '').toLowerCase();
-  if (!transactionHash || !from || !to) return null;
-
-  let event = 'Transfer';
-  if (from === ZERO_ADDRESS) event = 'Mint';
-  else if (to === ZERO_ADDRESS) event = 'Burn';
-
-  const blockNumber = item.blockNumber ? String(Number.parseInt(String(item.blockNumber), 16)) : '';
-  const logIndex = item.logIndex ? String(Number.parseInt(String(item.logIndex), 16)) : '';
-  const rawValue = hexToDecimalString(item.data);
-  return {
-    chain: chain.label,
-    chainKey: chain.key,
-    transactionHash,
-    transactionUrl: `${chain.txExplorer}/${transactionHash}`,
-    blockNumber,
-    timestamp: parseHexTimestamp(item.timeStamp),
-    from,
-    to,
-    fromUrl: `${chain.addressExplorer}/${from}`,
-    toUrl: `${chain.addressExplorer}/${to}`,
-    event,
-    amount: decimalAmount(rawValue, 18),
-    amountRaw: rawValue,
-    decimals: 18,
-    tokenSymbol: 'CHI',
-    sourceWallet: from,
-    sourceWalletUrl: `${chain.addressExplorer}/${from}`,
-    transactionInitiator: null,
-    calledContract: chain.token.toLowerCase(),
-    methodId: null,
-    functionName: null,
-    logIndex,
-    sourceKind: 'erc20-transfer-log',
-    sourceName: `${chain.label} Etherscan/BaseScan V2 logs`
-  };
-}
-
-async function etherscanV2Call(params) {
-  if (!EXPLORER_API_KEY) throw new Error('ETHERSCAN_API_KEY is not configured in Vercel');
-  const url = new URL(ETHERSCAN_V2_URL);
-  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
-  url.searchParams.set('apikey', EXPLORER_API_KEY);
-  const response = await fetchWithTimeout(url.toString());
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
-  if (data.status === '0' && !Array.isArray(data.result)) {
-    throw new Error(String(data.result || data.message || 'Etherscan V2 request failed'));
-  }
-  return data;
-}
-
-
-function normalizeExplorerTokenTx(item, chain) {
-  const from = String(item.from || '').toLowerCase();
-  const to = String(item.to || '').toLowerCase();
-  const transactionHash = String(item.hash || item.transactionHash || '').toLowerCase();
-  if (!transactionHash || !from || !to) return null;
-
-  let event = 'Transfer';
-  if (from === ZERO_ADDRESS) event = 'Mint';
-  else if (to === ZERO_ADDRESS) event = 'Burn';
-
-  const decimals = asNumber(item.tokenDecimal ?? item.tokenDecimals ?? item.decimals) ?? 18;
-  const rawValue = item.value ?? item.amount ?? '0';
-  const logIndex = item.logIndex ?? '';
-  const ts = item.timeStamp ? new Date(Number(item.timeStamp) * 1000).toISOString() : null;
-
-  return {
-    chain: chain.label,
-    chainKey: chain.key,
-    transactionHash,
-    transactionUrl: `${chain.txExplorer}/${transactionHash}`,
-    blockNumber: String(item.blockNumber || ''),
-    timestamp: ts,
-    from,
-    to,
-    fromUrl: `${chain.addressExplorer}/${from}`,
-    toUrl: `${chain.addressExplorer}/${to}`,
-    event,
-    amount: decimalAmount(rawValue, decimals),
-    amountRaw: String(rawValue ?? ''),
-    decimals,
-    tokenSymbol: item.tokenSymbol || 'CHI',
-    sourceWallet: from,
-    sourceWalletUrl: `${chain.addressExplorer}/${from}`,
-    transactionInitiator: null,
-    calledContract: chain.token.toLowerCase(),
-    methodId: null,
-    functionName: null,
-    logIndex: String(logIndex),
-    sourceKind: 'erc20-token-transfer-event',
-    sourceName: `${chain.label} Etherscan/BaseScan V2 token transfer events`
-  };
-}
-
-async function fetchExplorerTokenTx(chain, maxPages) {
-  const transfers = [];
-  const seen = new Set();
-  const pageSize = 1000;
-  let page = 1;
-  let exhausted = false;
-
-  while (page <= maxPages) {
-    const data = await etherscanV2Call({
-      chainid: chain.chainId,
-      module: 'account',
-      action: 'tokentx',
-      contractaddress: chain.token,
-      page: String(page),
-      offset: String(pageSize),
-      sort: 'desc'
-    });
-
-    const items = Array.isArray(data.result) ? data.result : [];
-    if (!items.length) {
-      exhausted = true;
-      break;
-    }
-
-    for (const item of items) {
-      const transfer = normalizeExplorerTokenTx(item, chain);
       if (!transfer) continue;
       const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfer.from}:${transfer.to}:${transfer.amountRaw}`;
       if (seen.has(key)) continue;
       seen.add(key);
       transfers.push(transfer);
+      if (transfers.length >= TABLE_RECORD_LIMIT) break;
     }
-
-    if (items.length < pageSize) {
-      exhausted = true;
-      break;
-    }
-    page += 1;
+    nextPage = data.next_page_params || null;
+    url = buildNextUrl(baseUrl, nextPage);
   }
 
-  transfers.sort(sortTransfers);
   return {
-    transfers: transfers.slice(0, TABLE_RECORD_LIMIT),
-    totalCount: transfers.length,
-    visibleTransferCount: Math.min(transfers.length, TABLE_RECORD_LIMIT),
-    source: `${chain.label} ${chain.key === 'base' ? 'BaseScan' : 'Etherscan'} V2 token transfer events`,
-    sourceUrl: chain.transferExplorer,
-    capped: !exhausted,
-    fetchedPages: page,
-    exactBaseScanStyle: true
-  };
-}
-
-async function fetchExplorerTransferLogs(chain, maxPages) {
-  const transfers = [];
-  const seen = new Set();
-  let page = 1;
-  let exhausted = false;
-
-  while (page <= maxPages) {
-    const data = await etherscanV2Call({
-      chainid: chain.chainId,
-      module: 'logs',
-      action: 'getLogs',
-      fromBlock: '0',
-      toBlock: 'latest',
-      address: chain.token,
-      topic0: TRANSFER_TOPIC,
-      page: String(page),
-      offset: String(LOG_OFFSET)
-    });
-
-    const items = Array.isArray(data.result) ? data.result : [];
-    if (!items.length) {
-      exhausted = true;
-      break;
-    }
-
-    for (const item of items) {
-      const transfer = normalizeExplorerLog(item, chain);
-      if (!transfer) continue;
-      const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfers.length}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      transfers.push(transfer);
-    }
-
-    if (items.length < LOG_OFFSET) {
-      exhausted = true;
-      break;
-    }
-    page += 1;
-  }
-
-  transfers.sort(sortTransfers);
-  return {
-    transfers: transfers.slice(0, TABLE_RECORD_LIMIT),
-    totalCount: transfers.length,
-    visibleTransferCount: Math.min(transfers.length, TABLE_RECORD_LIMIT),
-    source: `${chain.label} ${chain.key === 'base' ? 'BaseScan' : 'Etherscan'} V2 Transfer logs`,
-    sourceUrl: chain.transferExplorer,
-    capped: !exhausted,
-    fetchedPages: page
+    transfers,
+    visibleTransferCount: transfers.length,
+    source: `${chain.label} Blockscout token transfers`,
+    sourceUrl: baseUrl,
+    capped: Boolean(nextPage)
   };
 }
 
@@ -536,51 +277,51 @@ function sortTransfers(a, b) {
   return Number(b.logIndex || 0) - Number(a.logIndex || 0);
 }
 
-async function fetchBestTransferData(chain) {
-  const countersResult = await Promise.allSettled([fetchBlockscoutCounters(chain)]);
-  const counters = countersResult[0].status === 'fulfilled' ? countersResult[0].value : null;
-  const counterError = countersResult[0].status === 'rejected' ? countersResult[0].reason?.message : null;
-
-  if (chain.key === 'base' && EXPLORER_API_KEY) {
-    try {
-      const explorer = await fetchExplorerTokenTx(chain, BASESCAN_LOG_MAX_PAGES);
-      return {
-        ...explorer,
-        totalCount: explorer.totalCount ?? counters?.transfers ?? explorer.transfers.length,
-        counterCount: counters?.transfers ?? null,
-        counterSource: counters?.source || null,
-        counterSourceUrl: counters?.sourceUrl || null,
-        warnings: [
-          explorer.capped ? `BaseScan token-transfer fetch reached ${BASESCAN_LOG_MAX_PAGES} pages; the all-time Base count may be higher than the loaded count.` : null,
-          counterError ? `Base Blockscout counter unavailable: ${counterError}` : null
-        ].filter(Boolean)
-      };
-    } catch (error) {
-      const fallback = await fetchBlockscoutTokenTransfers(chain);
-      return {
-        ...fallback,
-        totalCount: counters?.transfers ?? fallback.transfers.length,
-        counterCount: counters?.transfers ?? null,
-        counterSource: counters?.source || null,
-        counterSourceUrl: counters?.sourceUrl || null,
-        warnings: [`BaseScan/Etherscan V2 token-transfer source failed, using Blockscout fallback: ${error.message}`]
-      };
-    }
+async function settleWithTimeout(promise, ms, label) {
+  try {
+    const value = await Promise.race([promise, timeoutError(ms, label)]);
+    return { status: 'fulfilled', value };
+  } catch (reason) {
+    return { status: 'rejected', reason };
   }
+}
 
-  const fallback = await fetchBlockscoutTokenTransfers(chain);
+async function fetchChainBundle(chain) {
+  const [countersResult, tokenResult, transfersResult] = await Promise.all([
+    settleWithTimeout(fetchCounters(chain), FAST_TIMEOUT_MS, `${chain.label} counters`),
+    settleWithTimeout(fetchTokenInfo(chain), FAST_TIMEOUT_MS, `${chain.label} token metadata`),
+    settleWithTimeout(fetchTokenTransfers(chain), FAST_TIMEOUT_MS * 2, `${chain.label} transfer rows`)
+  ]);
+
+  const counters = countersResult.status === 'fulfilled' ? countersResult.value : null;
+  const token = tokenResult.status === 'fulfilled' ? tokenResult.value : null;
+  const transferData = transfersResult.status === 'fulfilled' ? transfersResult.value : null;
+  const warnings = [];
+  if (countersResult.status === 'rejected') warnings.push(`${chain.label} counters unavailable: ${countersResult.reason?.message || 'unknown error'}`);
+  if (tokenResult.status === 'rejected') warnings.push(`${chain.label} token metadata unavailable: ${tokenResult.reason?.message || 'unknown error'}`);
+  if (transfersResult.status === 'rejected') warnings.push(`${chain.label} transfer rows unavailable: ${transfersResult.reason?.message || 'unknown error'}`);
+
+  const holders = Number.isFinite(counters?.holders)
+    ? counters.holders
+    : (Number.isFinite(token?.count) ? token.count : null);
+  const transferCount = Number.isFinite(counters?.transfers)
+    ? counters.transfers
+    : (Array.isArray(transferData?.transfers) ? transferData.transfers.length : 0);
+  const transfers = Array.isArray(transferData?.transfers) ? transferData.transfers : [];
+
   return {
-    ...fallback,
-    totalCount: counters?.transfers ?? fallback.transfers.length,
-    counterCount: counters?.transfers ?? null,
-    counterSource: counters?.source || null,
-    counterSourceUrl: counters?.sourceUrl || null,
-    warnings: [
-      counterError ? `${chain.label} Blockscout counter unavailable: ${counterError}` : null,
-      chain.key === 'base' && !EXPLORER_API_KEY
-        ? 'BaseScan exact mode is not active because ETHERSCAN_API_KEY is not configured in Vercel. Base rows use Blockscout public token-transfer data and link back to BaseScan.'
-        : null
-    ].filter(Boolean)
+    holders,
+    holderSource: counters ? counters.source : (token ? `${chain.label} Blockscout token metadata` : null),
+    holderSourceUrl: counters?.sourceUrl || chain.holderExplorer,
+    explorerUrl: chain.key === 'ethereum' ? ETHERSCAN_URL : BASESCAN_URL,
+    transferExplorerUrl: chain.transferExplorer,
+    token,
+    transfers,
+    transferCount,
+    visibleTransferCount: transfers.length,
+    transferSource: transferData?.source || null,
+    transferSourceUrl: transferData?.sourceUrl || chain.transferExplorer,
+    warnings
   };
 }
 
@@ -592,71 +333,60 @@ export default async function handler(req, res) {
 
   const requestUrl = new URL(req.url || '/', 'https://chili-coin.local');
   const force = requestUrl.searchParams.get('force') === '1';
-  res.setHeader('Cache-Control', force ? 'no-store, max-age=0' : 's-maxage=8, stale-while-revalidate=12');
+  // Let Vercel cache automatic polls. Manual refresh still bypasses cache.
+  res.setHeader('Cache-Control', force ? 'no-store, max-age=0' : 's-maxage=20, stale-while-revalidate=120');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   const fetchedAt = new Date().toISOString();
-  const [ethCounters, baseCounters, baseScanSnapshot, ethToken, baseToken, ethTransfers, baseTransfers] = await Promise.allSettled([
-    fetchBlockscoutCounters(chainConfigs.ethereum),
-    fetchBlockscoutCounters(chainConfigs.base),
-    fetchBaseScanTokenSnapshot(),
-    fetchTokenInfo(chainConfigs.ethereum),
-    fetchTokenInfo(chainConfigs.base),
-    fetchBestTransferData(chainConfigs.ethereum),
-    fetchBestTransferData(chainConfigs.base)
+  const [ethereumResult, baseResult, baseScanHintResult] = await Promise.all([
+    settleWithTimeout(fetchChainBundle(chainConfigs.ethereum), FAST_TIMEOUT_MS * 2, 'Ethereum bundle'),
+    settleWithTimeout(fetchChainBundle(chainConfigs.base), FAST_TIMEOUT_MS * 2, 'Base bundle'),
+    settleWithTimeout(fetchBaseScanHint(), BASESCAN_HINT_TIMEOUT_MS, 'BaseScan optional hint')
   ]);
 
   const warnings = [];
-  const ethCounterValue = ethCounters.status === 'fulfilled' ? ethCounters.value : null;
-  const baseCounterValue = baseCounters.status === 'fulfilled' ? baseCounters.value : null;
-  const baseScanSnapshotValue = baseScanSnapshot.status === 'fulfilled' ? baseScanSnapshot.value : null;
-  const ethTokenValue = ethToken.status === 'fulfilled' ? ethToken.value : null;
-  const baseTokenValue = baseToken.status === 'fulfilled' ? baseToken.value : null;
-  const ethTransferValue = ethTransfers.status === 'fulfilled' ? ethTransfers.value : null;
-  const baseTransferValue = baseTransfers.status === 'fulfilled' ? baseTransfers.value : null;
+  if (ethereumResult.status === 'rejected') warnings.push(`Ethereum bundle unavailable: ${ethereumResult.reason?.message || 'unknown error'}`);
+  if (baseResult.status === 'rejected') warnings.push(`Base bundle unavailable: ${baseResult.reason?.message || 'unknown error'}`);
+  if (baseScanHintResult.status === 'rejected') warnings.push(`BaseScan optional hint skipped: ${baseScanHintResult.reason?.message || 'unknown error'}`);
 
-  if (ethCounters.status === 'rejected') warnings.push(`Ethereum counter unavailable: ${ethCounters.reason?.message || 'unknown error'}`);
-  if (baseCounters.status === 'rejected') warnings.push(`Base counter unavailable: ${baseCounters.reason?.message || 'unknown error'}`);
-  if (baseScanSnapshot.status === 'rejected') warnings.push(`BaseScan page snapshot unavailable; using public indexer fallback where needed: ${baseScanSnapshot.reason?.message || 'unknown error'}`);
-  if (ethToken.status === 'rejected') warnings.push(`Ethereum token metadata unavailable: ${ethToken.reason?.message || 'unknown error'}`);
-  if (baseToken.status === 'rejected') warnings.push(`Base token metadata unavailable: ${baseToken.reason?.message || 'unknown error'}`);
-  if (ethTransfers.status === 'rejected') warnings.push(`Ethereum CHI transfer feed unavailable: ${ethTransfers.reason?.message || 'unknown error'}`);
-  if (baseTransfers.status === 'rejected') warnings.push(`Base CHI transfer feed unavailable: ${baseTransfers.reason?.message || 'unknown error'}`);
-  if (Array.isArray(ethTransferValue?.warnings)) warnings.push(...ethTransferValue.warnings);
-  if (Array.isArray(baseTransferValue?.warnings)) warnings.push(...baseTransferValue.warnings);
+  const ethereum = ethereumResult.status === 'fulfilled' ? ethereumResult.value : {
+    holders: null, holderSource: null, holderSourceUrl: chainConfigs.ethereum.holderExplorer, explorerUrl: ETHERSCAN_URL,
+    transferExplorerUrl: ETHERSCAN_TX_URL, token: null, transfers: [], transferCount: 0, visibleTransferCount: 0, transferSource: null, transferSourceUrl: ETHERSCAN_TX_URL, warnings: []
+  };
+  const base = baseResult.status === 'fulfilled' ? baseResult.value : {
+    holders: null, holderSource: null, holderSourceUrl: BASESCAN_URL, explorerUrl: BASESCAN_URL,
+    transferExplorerUrl: BASESCAN_URL, token: null, transfers: [], transferCount: 0, visibleTransferCount: 0, transferSource: null, transferSourceUrl: BASESCAN_URL, warnings: []
+  };
 
-  let baseHolders = Number.isFinite(baseScanSnapshotValue?.holders)
-    ? baseScanSnapshotValue.holders
-    : (Number.isFinite(baseCounterValue?.holders) ? baseCounterValue.holders : null);
-  let baseHolderSource = Number.isFinite(baseScanSnapshotValue?.holders)
-    ? baseScanSnapshotValue.source
-    : (baseHolders !== null ? 'Base Blockscout token counters' : null);
-  let baseHolderSourceUrl = Number.isFinite(baseScanSnapshotValue?.holders)
-    ? baseScanSnapshotValue.sourceUrl
-    : (baseCounterValue?.sourceUrl || BASESCAN_URL);
+  warnings.push(...(ethereum.warnings || []), ...(base.warnings || []));
+  if (!base.transferSource) warnings.push('Base transfer feed did not return rows this refresh; keeping BaseScan link available for official review.');
 
-  const ethHolders = Number.isFinite(ethCounterValue?.holders)
-    ? ethCounterValue.holders
-    : (Number.isFinite(ethTokenValue?.count) ? ethTokenValue.count : null);
-  const chainTotal = Number.isFinite(ethHolders) && Number.isFinite(baseHolders)
-    ? ethHolders + baseHolders
+  const baseHint = baseScanHintResult.status === 'fulfilled' ? baseScanHintResult.value : null;
+  if (baseHint) {
+    const hintedHolders = parseBaseScanTextCount(baseHint.content || '', 'holders');
+    const hintedTransfers = parseBaseScanTextCount(baseHint.content || '', 'transfers');
+    if (Number.isFinite(hintedHolders)) {
+      base.holders = hintedHolders;
+      base.holderSource = 'BaseScan public token page hint';
+      base.holderSourceUrl = BASESCAN_TOKEN_URL;
+    }
+    if (Number.isFinite(hintedTransfers)) {
+      base.transferCount = hintedTransfers;
+      base.transferSource = `${base.transferSource || 'Base public indexer'} + BaseScan public token page hint`;
+      base.transferSourceUrl = BASESCAN_URL;
+    }
+  }
+
+  const chainTotal = Number.isFinite(ethereum.holders) && Number.isFinite(base.holders)
+    ? ethereum.holders + base.holders
     : null;
-
-  const ethTransferRows = Array.isArray(ethTransferValue?.transfers) ? ethTransferValue.transfers : [];
-  const baseTransferRows = Array.isArray(baseTransferValue?.transfers) ? baseTransferValue.transfers : [];
-  const ethTransferTotal = Number.isFinite(ethTransferValue?.totalCount)
-    ? ethTransferValue.totalCount
-    : (Number.isFinite(ethCounterValue?.transfers) ? ethCounterValue.transfers : ethTransferRows.length);
-  const baseTransferTotal = Number.isFinite(baseScanSnapshotValue?.transfers)
-    ? baseScanSnapshotValue.transfers
-    : (Number.isFinite(baseTransferValue?.totalCount)
-      ? baseTransferValue.totalCount
-      : (Number.isFinite(baseCounterValue?.transfers) ? baseCounterValue.transfers : baseTransferRows.length));
-  const allTransferTotal = ethTransferTotal + baseTransferTotal;
-  const allTransfers = [...ethTransferRows, ...baseTransferRows].sort(sortTransfers).slice(0, TABLE_RECORD_LIMIT);
+  const allTransfers = [...(ethereum.transfers || []), ...(base.transfers || [])]
+    .sort(sortTransfers)
+    .slice(0, TABLE_RECORD_LIMIT);
+  const allTransferTotal = (Number(ethereum.transferCount) || 0) + (Number(base.transferCount) || 0);
 
   return res.status(200).json({
-    ok: Boolean(baseHolders !== null || ethHolders !== null || allTransfers.length),
+    ok: Boolean(ethereum.holders !== null || base.holders !== null || allTransfers.length),
     fetchedAt,
     refreshSeconds: 20,
     contracts: {
@@ -664,56 +394,23 @@ export default async function handler(req, res) {
       baseToken: BASE_TOKEN
     },
     dataMode: {
-      baseScanPageMode: Boolean(baseScanSnapshotValue),
-      baseScanExactMode: Boolean(EXPLORER_API_KEY && baseTransferValue?.source?.includes('BaseScan')),
-      explorerApiKeyConfigured: Boolean(EXPLORER_API_KEY),
-      note: baseScanSnapshotValue
-        ? 'No API key mode is active. Base holder and transfer totals are read from the public BaseScan token page/text mirror when available; latest rows use public token-transfer indexers.'
-        : 'BaseScan page mode is unavailable for this refresh. The tracker is using public indexer fallback data and links back to BaseScan for review.'
+      mode: 'v12-fast-stable-no-key',
+      explorerApiKeyConfigured: Boolean(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY),
+      note: 'Fast no-key mode is active. Base data uses a public token indexer first so the dashboard does not block on BaseScan page scraping. BaseScan remains linked for official review.'
     },
-    ethereum: {
-      holders: ethHolders,
-      holderSource: ethCounterValue ? ethCounterValue.source : (ethTokenValue ? 'Ethereum Blockscout token metadata' : null),
-      holderSourceUrl: ethCounterValue?.sourceUrl || chainConfigs.ethereum.holderExplorer,
-      explorerUrl: ETHERSCAN_URL,
-      transferExplorerUrl: ETHERSCAN_TX_URL,
-      token: ethTokenValue,
-      transfers: ethTransferRows,
-      transferCount: ethTransferTotal,
-      visibleTransferCount: ethTransferRows.length,
-      transferSource: ethTransferValue?.source || null,
-      transferSourceUrl: ethTransferValue?.sourceUrl || null
-    },
-    base: {
-      holders: baseHolders,
-      holderSource: baseHolderSource,
-      holderSourceUrl: baseHolderSourceUrl,
-      explorerUrl: BASESCAN_URL,
-      token: baseTokenValue,
-      transfers: baseTransferRows,
-      transferCount: baseTransferTotal,
-      visibleTransferCount: baseTransferRows.length,
-      transferSource: baseScanSnapshotValue?.transfers ? `${baseScanSnapshotValue.source} transfer total + ${baseTransferValue?.source || 'public latest rows'}` : (baseTransferValue?.source || null),
-      transferSourceUrl: baseScanSnapshotValue?.sourceUrl || baseTransferValue?.sourceUrl || BASESCAN_URL,
-      transferExplorerUrl: BASESCAN_URL,
-      counterCount: baseScanSnapshotValue?.transfers ?? baseTransferValue?.counterCount ?? baseCounterValue?.transfers ?? null
-    },
+    ethereum,
+    base,
     transactions: {
       totalCount: allTransferTotal,
       latestCount: allTransfers.length,
-      ethereumTotalCount: ethTransferTotal,
-      baseTotalCount: baseTransferTotal,
-      ethereumLatestCount: ethTransferRows.length,
-      baseLatestCount: baseTransferRows.length,
+      ethereumTotalCount: ethereum.transferCount || 0,
+      baseTotalCount: base.transferCount || 0,
+      ethereumLatestCount: ethereum.transfers?.length || 0,
+      baseLatestCount: base.transfers?.length || 0,
       label: 'All Chain Transactions',
-      note: 'The TXN card counts indexed ERC-20 token Transfer events. Base rows use the BaseScan/Etherscan V2 tokentx event feed when configured: Source Wallet is the CHI From wallet, Recipient is the CHI To wallet, and Amount is decoded from the token transfer event value.',
+      note: 'TXN counts public indexed ERC-20 Transfer events. Source Wallet is the CHI From wallet, Recipient is the CHI To wallet, and Amount is decoded from the token transfer event value.',
       records: allTransfers,
-      sources: [
-        ethTransferValue?.source || null,
-        baseTransferValue?.source || null,
-        ethTransferValue?.counterSource || null,
-        baseTransferValue?.counterSource || null
-      ].filter(Boolean),
+      sources: [ethereum.transferSource, base.transferSource, ethereum.holderSource, base.holderSource].filter(Boolean),
       explorerLinks: {
         ethereum: ETHERSCAN_TX_URL,
         base: BASESCAN_URL
