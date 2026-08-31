@@ -2,9 +2,11 @@ const API_URL = '/api/live';
 const BASESCAN_TX_URL = 'https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions';
 const ETHERSCAN_TX_URL = 'https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA#tokentxns';
 const REFRESH_MS = 20_000;
+const LAST_GOOD_KEY = 'chiliTrackerLastGoodV21';
 
 const state = {
   data: null,
+  lastGood: loadLastGood(),
   loading: false,
   timer: null,
   feedbackTimer: null,
@@ -35,6 +37,80 @@ const elements = {
   directionFilter: document.querySelector('#directionFilter'),
   clearWalletFilter: document.querySelector('#clearWalletFilter')
 };
+
+
+function loadLastGood() {
+  try {
+    const raw = localStorage.getItem(LAST_GOOD_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveLastGood(data) {
+  try {
+    localStorage.setItem(LAST_GOOD_KEY, JSON.stringify(data));
+  } catch (_) {}
+}
+
+function validPositiveNumber(value) {
+  return Number.isFinite(Number(value)) && Number(value) > 0;
+}
+
+function mergeWithLastGood(incoming) {
+  const previous = state.lastGood;
+  if (!incoming || !previous) return incoming;
+  const merged = structuredClone ? structuredClone(incoming) : JSON.parse(JSON.stringify(incoming));
+
+  for (const chain of ['ethereum', 'base']) {
+    if (!validPositiveNumber(merged[chain]?.holders) && validPositiveNumber(previous[chain]?.holders)) {
+      merged[chain].holders = previous[chain].holders;
+      merged[chain].holderSource = `${previous[chain].holderSource || 'last successful live source'} (kept from last good refresh)`;
+      merged[chain].holderSourceUrl = previous[chain].holderSourceUrl || merged[chain].holderSourceUrl;
+    }
+    if (!validPositiveNumber(merged[chain]?.transferCount) && validPositiveNumber(previous[chain]?.transferCount)) {
+      merged[chain].transferCount = previous[chain].transferCount;
+      merged[chain].transferSource = `${previous[chain].transferSource || 'last successful live source'} (kept from last good refresh)`;
+      merged[chain].transferSourceUrl = previous[chain].transferSourceUrl || merged[chain].transferSourceUrl;
+    }
+    if ((!Array.isArray(merged[chain]?.transfers) || !merged[chain].transfers.length) && Array.isArray(previous[chain]?.transfers) && previous[chain].transfers.length) {
+      merged[chain].transfers = previous[chain].transfers;
+      merged[chain].visibleTransferCount = previous[chain].visibleTransferCount || previous[chain].transfers.length;
+    }
+  }
+
+  if (!validPositiveNumber(merged.chainTotal) && validPositiveNumber(merged.ethereum?.holders) && validPositiveNumber(merged.base?.holders)) {
+    merged.chainTotal = Number(merged.ethereum.holders) + Number(merged.base.holders);
+  }
+
+  const ethTx = validPositiveNumber(merged.ethereum?.transferCount) ? Number(merged.ethereum.transferCount) : null;
+  const baseTx = validPositiveNumber(merged.base?.transferCount) ? Number(merged.base.transferCount) : null;
+  if (merged.transactions) {
+    merged.transactions.ethereumTotalCount = ethTx ?? merged.transactions.ethereumTotalCount;
+    merged.transactions.baseTotalCount = baseTx ?? merged.transactions.baseTotalCount;
+    if (ethTx !== null && baseTx !== null) {
+      merged.transactions.totalCount = ethTx + baseTx;
+      merged.transactions.label = 'All Chain Transactions';
+    }
+    if ((!Array.isArray(merged.transactions.records) || !merged.transactions.records.length) && Array.isArray(previous.transactions?.records) && previous.transactions.records.length) {
+      merged.transactions.records = previous.transactions.records;
+      merged.transactions.latestCount = previous.transactions.latestCount || previous.transactions.records.length;
+    }
+  }
+
+  return merged;
+}
+
+function rememberGood(data) {
+  if (!data) return;
+  const hasBase = validPositiveNumber(data.base?.holders) || validPositiveNumber(data.base?.transferCount) || (Array.isArray(data.base?.transfers) && data.base.transfers.length);
+  const hasEth = validPositiveNumber(data.ethereum?.holders) || validPositiveNumber(data.ethereum?.transferCount) || (Array.isArray(data.ethereum?.transfers) && data.ethereum.transfers.length);
+  if (hasBase || hasEth) {
+    state.lastGood = data;
+    saveLastGood(data);
+  }
+}
 
 function formatNumber(value) {
   if (value === null || value === undefined || value === '') return '—';
@@ -294,7 +370,9 @@ async function loadLiveData({ manual = false } = {}) {
     });
 
     if (!response.ok) throw new Error(`Live endpoint returned HTTP ${response.status}`);
-    const data = await response.json();
+    const rawData = await response.json();
+    const data = mergeWithLastGood(rawData);
+    rememberGood(data);
     state.data = data;
     renderMetrics(data);
     renderActivity(data);

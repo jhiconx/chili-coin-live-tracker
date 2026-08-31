@@ -1,7 +1,5 @@
-# Chili Coin Live Wallet Tracker — V20 Stable Official API
+# Chili Coin Live Tracker — V21 Stable Sources
 
-Replacement files for the deployed tracker.
+This update fixes the Base/TXN instability by separating official explorer counts from latest-row transfer feeds and by preserving the last good refresh in the browser instead of overwriting valid Base values with zero or blank data when a source has a temporary miss.
 
-V20 fixes the misleading zero problem and Base TXN failures by using Etherscan V2 `account/tokentx` for live ETH/Base transfer rows and by never displaying unavailable Base data as `0`.
-
-Upload every file and folder in this replacement package to GitHub, including the full `api` and `assets` folders.
+Upload every file in this replacement folder to GitHub, including the `api` and `assets` folders.
