@@ -37,6 +37,7 @@ const elements = {
 };
 
 function formatNumber(value) {
+  if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
   return Number.isFinite(number) ? number.toLocaleString('en-US') : '—';
 }
