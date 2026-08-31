@@ -1,28 +1,38 @@
-# Chili Coin Live Tracker — V22 Base Rebuild
+# Chili Coin Live Tracker — V23 Base Reset
 
-This replacement rebuilds the Base logic from scratch.
-
-## What changed
-
-- Base no longer uses BaseScan page scraping.
-- Base no longer uses Blockscout holder counters.
-- Base holders are computed from the complete Base CHI ERC-20 Transfer history.
-- Base TXN is counted from the same complete Transfer history.
-- Base latest rows come from the same Transfer history.
-- If Base fails, the API leaves Base blank instead of replacing it with `0` or a wrong fallback value.
+Full GitHub-ready code for the Chili Coin tracker.
 
 ## Upload
 
-Upload every file/folder in this replacement folder to the top level of the GitHub repository, including the full `api` folder.
+Upload all files and folders in this directory to the root of the GitHub repo:
 
-Commit message:
+- `index.html`
+- `styles.css`
+- `app.js`
+- `api/`
+- `assets/`
+- `README.md`
+- `SOURCE_NOTES.md`
 
-`Rebuild Base from Transfer history`
+## Vercel
 
-After Vercel redeploys, open:
+Environment variable name:
 
-`https://chili-coin-live-tracker.vercel.app/api/live?force=1`
+```text
+ETHERSCAN_API_KEY
+```
+
+This version has a separate `/api/base` endpoint and keeps last-good Base data instead of replacing it with zero.
+
+Test after deployment:
+
+```text
+https://chili-coin-live-tracker.vercel.app/api/live?force=1
+https://chili-coin-live-tracker.vercel.app/api/base?force=1
+```
 
 Search for:
 
-`v22-base-rebuilt-from-transfer-history`
+```text
+v23-base-reset-standalone
+```

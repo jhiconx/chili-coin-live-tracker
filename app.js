@@ -1,134 +1,105 @@
 const API_URL = '/api/live';
-const BASESCAN_TX_URL = 'https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions';
-const ETHERSCAN_TX_URL = 'https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA#tokentxns';
+const BASE_API_URL = '/api/base';
 const REFRESH_MS = 20_000;
-const LAST_GOOD_KEY = 'chiliTrackerLastGoodV22';
+const LAST_GOOD_KEY = 'chiliTrackerLastGoodV23';
 
 const state = {
   data: null,
   lastGood: loadLastGood(),
   loading: false,
   timer: null,
-  feedbackTimer: null,
   focusWallet: '',
   direction: 'all'
 };
 
+const $ = (selector) => document.querySelector(selector);
 const elements = {
-  connectionStatus: document.querySelector('#connectionStatus'),
-  lastUpdated: document.querySelector('#lastUpdated'),
-  ethHolders: document.querySelector('#ethHolders'),
-  baseHolders: document.querySelector('#baseHolders'),
-  chainTotal: document.querySelector('#chainTotal'),
-  allChainTransactions: document.querySelector('#allChainTransactions'),
-  txnSource: document.querySelector('#txnSource'),
-  ethHolderSource: document.querySelector('#ethHolderSource'),
-  baseHolderSource: document.querySelector('#baseHolderSource'),
-  sidebarRefresh: document.querySelector('#sidebarRefresh'),
-  refreshFeedback: document.querySelector('#refreshFeedback'),
-  activityRefresh: document.querySelector('#activityRefreshButton'),
-  activityRows: document.querySelector('#activityRows'),
-  activityStatus: document.querySelector('#activityStatus'),
-  activityUpdated: document.querySelector('#activityUpdated'),
-  transferSource: document.querySelector('#transferSource'),
-  baseTransactionsLink: document.querySelector('#baseTransactionsLink'),
-  ethTransactionsLink: document.querySelector('#ethTransactionsLink'),
-  walletFocusInput: document.querySelector('#walletFocusInput'),
-  directionFilter: document.querySelector('#directionFilter'),
-  clearWalletFilter: document.querySelector('#clearWalletFilter')
+  connectionStatus: $('#connectionStatus'),
+  lastUpdated: $('#lastUpdated'),
+  ethHolders: $('#ethHolders'),
+  baseHolders: $('#baseHolders'),
+  chainTotal: $('#chainTotal'),
+  allChainTransactions: $('#allChainTransactions'),
+  txnSource: $('#txnSource'),
+  ethHolderSource: $('#ethHolderSource'),
+  baseHolderSource: $('#baseHolderSource'),
+  sidebarRefresh: $('#sidebarRefresh'),
+  refreshFeedback: $('#refreshFeedback'),
+  activityRefresh: $('#activityRefreshButton'),
+  activityRows: $('#activityRows'),
+  activityStatus: $('#activityStatus'),
+  activityUpdated: $('#activityUpdated'),
+  transferSource: $('#transferSource'),
+  walletFocusInput: $('#walletFocusInput'),
+  directionFilter: $('#directionFilter'),
+  clearWalletFilter: $('#clearWalletFilter')
 };
-
 
 function loadLastGood() {
   try {
     const raw = localStorage.getItem(LAST_GOOD_KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch (_) {
-    return null;
-  }
+  } catch (_) { return null; }
 }
 
 function saveLastGood(data) {
   try {
-    localStorage.setItem(LAST_GOOD_KEY, JSON.stringify(data));
+    const hasBase = Number.isFinite(Number(data?.base?.holders)) || Number.isFinite(Number(data?.base?.transferCount)) || data?.base?.transfers?.length;
+    if (hasBase) {
+      localStorage.setItem(LAST_GOOD_KEY, JSON.stringify(data));
+      state.lastGood = data;
+    }
   } catch (_) {}
 }
 
-function validPositiveNumber(value) {
-  return Number.isFinite(Number(value)) && Number(value) > 0;
-}
-
-function mergeWithLastGood(incoming) {
-  const previous = state.lastGood;
-  if (!incoming || !previous) return incoming;
-  const merged = structuredClone ? structuredClone(incoming) : JSON.parse(JSON.stringify(incoming));
-
-  for (const chain of ['ethereum', 'base']) {
-    if (!validPositiveNumber(merged[chain]?.holders) && validPositiveNumber(previous[chain]?.holders)) {
-      merged[chain].holders = previous[chain].holders;
-      merged[chain].holderSource = `${previous[chain].holderSource || 'last successful live source'} (kept from last good refresh)`;
-      merged[chain].holderSourceUrl = previous[chain].holderSourceUrl || merged[chain].holderSourceUrl;
-    }
-    if (!validPositiveNumber(merged[chain]?.transferCount) && validPositiveNumber(previous[chain]?.transferCount)) {
-      merged[chain].transferCount = previous[chain].transferCount;
-      merged[chain].transferSource = `${previous[chain].transferSource || 'last successful live source'} (kept from last good refresh)`;
-      merged[chain].transferSourceUrl = previous[chain].transferSourceUrl || merged[chain].transferSourceUrl;
-    }
-    if ((!Array.isArray(merged[chain]?.transfers) || !merged[chain].transfers.length) && Array.isArray(previous[chain]?.transfers) && previous[chain].transfers.length) {
-      merged[chain].transfers = previous[chain].transfers;
-      merged[chain].visibleTransferCount = previous[chain].visibleTransferCount || previous[chain].transfers.length;
-    }
-  }
-
-  if (!validPositiveNumber(merged.chainTotal) && validPositiveNumber(merged.ethereum?.holders) && validPositiveNumber(merged.base?.holders)) {
-    merged.chainTotal = Number(merged.ethereum.holders) + Number(merged.base.holders);
-  }
-
-  const ethTx = validPositiveNumber(merged.ethereum?.transferCount) ? Number(merged.ethereum.transferCount) : null;
-  const baseTx = validPositiveNumber(merged.base?.transferCount) ? Number(merged.base.transferCount) : null;
-  if (merged.transactions) {
-    merged.transactions.ethereumTotalCount = ethTx ?? merged.transactions.ethereumTotalCount;
-    merged.transactions.baseTotalCount = baseTx ?? merged.transactions.baseTotalCount;
-    if (ethTx !== null && baseTx !== null) {
-      merged.transactions.totalCount = ethTx + baseTx;
-      merged.transactions.label = 'All Chain Transactions';
-    }
-    if ((!Array.isArray(merged.transactions.records) || !merged.transactions.records.length) && Array.isArray(previous.transactions?.records) && previous.transactions.records.length) {
-      merged.transactions.records = previous.transactions.records;
-      merged.transactions.latestCount = previous.transactions.latestCount || previous.transactions.records.length;
-    }
-  }
-
-  return merged;
-}
-
-function rememberGood(data) {
-  if (!data) return;
-  const hasBase = validPositiveNumber(data.base?.holders) || validPositiveNumber(data.base?.transferCount) || (Array.isArray(data.base?.transfers) && data.base.transfers.length);
-  const hasEth = validPositiveNumber(data.ethereum?.holders) || validPositiveNumber(data.ethereum?.transferCount) || (Array.isArray(data.ethereum?.transfers) && data.ethereum.transfers.length);
-  if (hasBase || hasEth) {
-    state.lastGood = data;
-    saveLastGood(data);
-  }
-}
-
 function formatNumber(value) {
-  if (value === null || value === undefined || value === '') return '—';
-  const number = Number(value);
-  return Number.isFinite(number) ? number.toLocaleString('en-US') : '—';
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString('en-US') : '—';
 }
 
-function formatDecimalString(value) {
-  if (value === null || value === undefined || value === '') return '—';
-  const [whole, fraction = ''] = String(value).split('.');
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return fraction ? `${grouped}.${fraction}` : grouped;
+function shortAddress(address) {
+  const text = String(address || '');
+  if (!/^0x[a-fA-F0-9]{40}$/.test(text)) return text || '—';
+  return `${text.slice(0, 6)}…${text.slice(-4)}`;
 }
 
-function shortHash(value, start = 7, end = 5) {
-  if (!value) return '—';
-  const text = String(value);
-  return text.length > start + end + 1 ? `${text.slice(0, start)}…${text.slice(-end)}` : text;
+function formatAmount(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return String(value);
+  if (num === 0) return '0';
+  if (Math.abs(num) >= 1_000_000) return num.toLocaleString('en-US', { maximumFractionDigits: 6 });
+  if (Math.abs(num) >= 1) return num.toLocaleString('en-US', { maximumFractionDigits: 8 });
+  return num.toLocaleString('en-US', { maximumSignificantDigits: 8 });
+}
+
+function relativeTime(iso) {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  const diff = Date.now() - date.getTime();
+  const abs = Math.abs(diff);
+  const units = [
+    ['year', 365 * 24 * 60 * 60 * 1000],
+    ['month', 30 * 24 * 60 * 60 * 1000],
+    ['day', 24 * 60 * 60 * 1000],
+    ['hour', 60 * 60 * 1000],
+    ['minute', 60 * 1000]
+  ];
+  for (const [unit, ms] of units) {
+    if (abs >= ms) {
+      const value = Math.round(diff / ms);
+      return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(-value, unit);
+    }
+  }
+  return 'just now';
+}
+
+function displayTime(iso) {
+  if (!iso) return 'Not updated yet';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Not updated yet';
+  return `Updated ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`;
 }
 
 function normalizeAddress(value) {
@@ -136,300 +107,232 @@ function normalizeAddress(value) {
   return /^0x[a-f0-9]{40}$/.test(text) ? text : '';
 }
 
-function normalizeTimestamp(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
+function bestData() {
+  return state.data || state.lastGood || null;
 }
 
-function relativeTime(value) {
-  const date = normalizeTimestamp(value);
-  if (!date) return 'Time unavailable';
-  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
-  const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-  const ranges = [
-    ['year', 31_536_000],
-    ['month', 2_592_000],
-    ['day', 86_400],
-    ['hour', 3_600],
-    ['minute', 60],
-    ['second', 1]
-  ];
-  for (const [unit, size] of ranges) {
-    if (Math.abs(seconds) >= size || unit === 'second') return formatter.format(Math.round(seconds / size), unit);
+function mergeGoodData(incoming) {
+  const prior = state.lastGood;
+  if (!prior) return incoming;
+  const merged = structuredCloneSafe(incoming);
+  if (!Number.isFinite(Number(merged?.base?.holders)) && Number.isFinite(Number(prior?.base?.holders))) {
+    merged.base = merged.base || {};
+    merged.base.holders = prior.base.holders;
+    merged.base.holderSource = `${prior.base.holderSource || 'last good Base holders'} (last good)`;
   }
-  return 'just now';
+  if (!Number.isFinite(Number(merged?.base?.transferCount)) && Number.isFinite(Number(prior?.base?.transferCount))) {
+    merged.base = merged.base || {};
+    merged.base.transferCount = prior.base.transferCount;
+    merged.base.transferCountSource = `${prior.base.transferCountSource || 'last good Base TXN'} (last good)`;
+  }
+  if ((!merged?.base?.transfers || !merged.base.transfers.length) && prior?.base?.transfers?.length) {
+    merged.base = merged.base || {};
+    merged.base.transfers = prior.base.transfers;
+    merged.base.transferSource = `${prior.base.transferSource || 'last good Base rows'} (last good)`;
+  }
+  const baseCount = Number(merged?.base?.transferCount);
+  const ethRows = Number(merged?.ethereum?.transfers?.length || 0);
+  if (Number.isFinite(baseCount)) {
+    merged.totals = merged.totals || {};
+    merged.totals.allChainTransactions = baseCount + ethRows;
+    merged.transactions = merged.transactions || {};
+    merged.transactions.totalCount = baseCount + ethRows;
+  }
+  return merged;
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+function structuredCloneSafe(obj) {
+  try { return structuredClone(obj); } catch (_) { return JSON.parse(JSON.stringify(obj)); }
 }
 
-function setConnection(type, text) {
+async function fetchLive(force = false) {
+  const response = await fetch(`${API_URL}${force ? '?force=1' : ''}`, { cache: force ? 'no-store' : 'default' });
+  if (!response.ok) throw new Error(`Live API HTTP ${response.status}`);
+  return response.json();
+}
+
+async function fetchBase(force = false) {
+  const response = await fetch(`${BASE_API_URL}${force ? '?force=1' : ''}`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`Base API HTTP ${response.status}`);
+  return response.json();
+}
+
+async function refresh(force = false) {
+  if (state.loading) return;
+  state.loading = true;
+  setStatus('loading', force ? 'Refreshing…' : 'Refreshing live sources…');
+  try {
+    const live = await fetchLive(force);
+    let data = mergeGoodData(live);
+
+    // Base is also fetched independently. A good Base response overrides only Base values.
+    try {
+      const base = await fetchBase(force);
+      if (base?.base) {
+        data.base = { ...(data.base || {}), ...base.base };
+        if (Number.isFinite(Number(base.base.transferCount))) {
+          const ethRows = Number(data.ethereum?.transfers?.length || 0);
+          data.totals = data.totals || {};
+          data.transactions = data.transactions || {};
+          data.totals.allChainTransactions = Number(base.base.transferCount) + ethRows;
+          data.transactions.totalCount = Number(base.base.transferCount) + ethRows;
+          data.transactions.baseTotalCount = Number(base.base.transferCount);
+        }
+        if (base.base.transfers?.length) {
+          data.transactions = data.transactions || {};
+          const ethRows = data.ethereum?.transfers || [];
+          data.transactions.rows = [...base.base.transfers, ...ethRows].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+          data.transactions.baseLoadedRows = base.base.transfers.length;
+        }
+      }
+    } catch (baseError) {
+      data.warnings = [...(data.warnings || []), `Independent Base endpoint failed: ${baseError.message}`];
+    }
+
+    state.data = data;
+    saveLastGood(data);
+    render();
+    const warningCount = data.warnings?.length || 0;
+    setStatus(warningCount ? 'warning' : 'live', warningCount ? `Live with ${warningCount} source warning${warningCount === 1 ? '' : 's'}` : 'Live');
+    if (force) showFeedback('✓ Updated');
+  } catch (error) {
+    if (state.lastGood) {
+      state.data = state.lastGood;
+      render();
+      setStatus('warning', 'Showing last good data');
+      showFeedback('Using last good data');
+    } else {
+      setStatus('error', 'Live source unavailable');
+      showFeedback('Refresh failed');
+      renderEmpty(error.message);
+    }
+  } finally {
+    state.loading = false;
+  }
+}
+
+function setStatus(type, text) {
+  if (!elements.connectionStatus) return;
   elements.connectionStatus.className = `connection-pill ${type}`;
   elements.connectionStatus.textContent = text;
 }
 
-function setRefreshButton({ loading = false, success = false, error = false } = {}) {
+function showFeedback(text) {
+  if (!elements.refreshFeedback) return;
+  elements.refreshFeedback.textContent = text;
   clearTimeout(state.feedbackTimer);
-  elements.sidebarRefresh.disabled = loading;
-  if (elements.activityRefresh) elements.activityRefresh.disabled = loading;
-
-  if (loading) {
-    elements.sidebarRefresh.textContent = 'Refreshing…';
-    if (elements.activityRefresh) elements.activityRefresh.textContent = '↻ Refreshing…';
-    elements.refreshFeedback.textContent = 'Requesting current holder totals and CHI transaction flow.';
-    return;
-  }
-
-  if (success) {
-    elements.sidebarRefresh.textContent = '✓ Updated';
-    if (elements.activityRefresh) elements.activityRefresh.textContent = '✓ TXN updated';
-    elements.refreshFeedback.textContent = 'Live data refreshed.';
-    state.feedbackTimer = setTimeout(() => {
-      elements.sidebarRefresh.textContent = 'Refresh now';
-      if (elements.activityRefresh) elements.activityRefresh.textContent = '↻ Refresh TXN';
-      elements.refreshFeedback.textContent = '';
-    }, 2200);
-    return;
-  }
-
-  if (error) {
-    elements.sidebarRefresh.textContent = 'Try again';
-    if (elements.activityRefresh) elements.activityRefresh.textContent = 'Try TXN again';
-    elements.refreshFeedback.textContent = 'Refresh failed. The automatic refresh will retry.';
-    state.feedbackTimer = setTimeout(() => {
-      elements.sidebarRefresh.textContent = 'Refresh now';
-      if (elements.activityRefresh) elements.activityRefresh.textContent = '↻ Refresh TXN';
-    }, 3500);
-    return;
-  }
-
-  elements.sidebarRefresh.textContent = 'Refresh now';
-  if (elements.activityRefresh) elements.activityRefresh.textContent = '↻ Refresh TXN';
-  elements.refreshFeedback.textContent = '';
+  state.feedbackTimer = setTimeout(() => { elements.refreshFeedback.textContent = ''; }, 3500);
 }
 
-function renderMetrics(data) {
-  elements.ethHolders.textContent = formatNumber(data.ethereum?.holders);
-  elements.baseHolders.textContent = formatNumber(data.base?.holders);
-  elements.chainTotal.textContent = formatNumber(data.chainTotal);
-  if (elements.allChainTransactions) elements.allChainTransactions.textContent = formatNumber(data.transactions?.totalCount ?? data.transactions?.latestCount);
-  if (elements.txnSource) elements.txnSource.textContent = data.transactions?.label || 'All Chain Transactions';
-  elements.ethHolderSource.textContent = data.ethereum?.holderSource || 'Ethereum source unavailable';
-  elements.baseHolderSource.textContent = data.base?.holderSource || 'Base source unavailable';
+function render() {
+  const data = bestData();
+  if (!data) return;
+  const ethHolders = data.ethereum?.holders;
+  const baseHolders = data.base?.holders;
+  const chainTotal = Number.isFinite(Number(ethHolders)) && Number.isFinite(Number(baseHolders)) ? Number(ethHolders) + Number(baseHolders) : data.totals?.chainHolderTotal;
+  const txnTotal = data.totals?.allChainTransactions ?? data.transactions?.totalCount;
+
+  elements.ethHolders && (elements.ethHolders.textContent = formatNumber(ethHolders));
+  elements.baseHolders && (elements.baseHolders.textContent = formatNumber(baseHolders));
+  elements.chainTotal && (elements.chainTotal.textContent = formatNumber(chainTotal));
+  elements.allChainTransactions && (elements.allChainTransactions.textContent = formatNumber(txnTotal));
+  elements.ethHolderSource && (elements.ethHolderSource.textContent = data.ethereum?.holderSource || 'Ethereum source unavailable');
+  elements.baseHolderSource && (elements.baseHolderSource.textContent = data.base?.holderSource || 'Base source unavailable');
+  elements.txnSource && (elements.txnSource.textContent = data.transactions?.baseTotalCount ? 'All Chain Transactions' : 'TXN source partial');
+  elements.lastUpdated && (elements.lastUpdated.textContent = displayTime(data.fetchedAt));
+  elements.activityUpdated && (elements.activityUpdated.textContent = displayTime(data.fetchedAt));
+
+  const sourceParts = [
+    data.base?.transferSource || data.base?.transferCountSource,
+    data.ethereum?.transferSource
+  ].filter(Boolean);
+  elements.transferSource && (elements.transferSource.textContent = sourceParts.length ? `Transfer source: ${sourceParts.join(' + ')}` : 'Transfer source: unavailable');
+
+  renderRows(data);
 }
 
-function eventClass(event) {
-  return String(event || 'transfer').toLowerCase();
-}
-
-function chainClass(chainKey) {
-  return String(chainKey || '').toLowerCase() === 'base' ? 'base' : 'ethereum';
-}
-
-function flowForTransfer(item, focusWallet) {
-  const from = String(item.from || '').toLowerCase();
-  const to = String(item.to || '').toLowerCase();
-  const sourceWallet = String(item.sourceWallet || item.transactionInitiator || '').toLowerCase();
-  if (focusWallet) {
-    if (from === focusWallet && to === focusWallet) return 'Self';
-    if (to === focusWallet) return 'In';
-    if (from === focusWallet || sourceWallet === focusWallet) return 'Out';
-    return 'Other';
-  }
-  return item.event || 'Transfer';
-}
-
-function flowClass(flow) {
-  return String(flow || 'transfer').toLowerCase();
-}
-
-function allTransferRecords(data) {
-  if (Array.isArray(data.transactions?.records)) return data.transactions.records;
-  return [
-    ...(Array.isArray(data.ethereum?.transfers) ? data.ethereum.transfers : []),
-    ...(Array.isArray(data.base?.transfers) ? data.base.transfers : [])
-  ];
-}
-
-function filteredTransfers(data) {
-  const focusWallet = normalizeAddress(state.focusWallet);
-  const direction = state.direction;
-  let rows = allTransferRecords(data);
-
-  if (focusWallet) {
-    rows = rows.filter(item => {
-      const flow = flowForTransfer(item, focusWallet).toLowerCase();
-      if (flow === 'other') return false;
-      if (direction === 'in') return flow === 'in';
-      if (direction === 'out') return flow === 'out';
-      return true;
-    });
-  }
-
-  return rows;
-}
-
-function renderActivity(data) {
+function renderRows(data) {
   if (!elements.activityRows) return;
-  const transfers = filteredTransfers(data);
-  const totalLoaded = allTransferRecords(data).length;
-  const fetched = normalizeTimestamp(data.fetchedAt);
-  const ethCount = data.transactions?.ethereumTotalCount ?? data.ethereum?.transferCount ?? data.transactions?.ethereumLatestCount ?? 0;
-  const baseCount = data.transactions?.baseTotalCount ?? data.base?.transferCount ?? data.transactions?.baseLatestCount ?? 0;
-  const focusWallet = normalizeAddress(state.focusWallet);
+  const allRows = data.transactions?.rows || data.base?.transfers || [];
+  const focus = normalizeAddress(state.focusWallet);
+  let rows = allRows;
+  if (focus) {
+    rows = rows.filter(row => row.from?.toLowerCase() === focus || row.to?.toLowerCase() === focus);
+    if (state.direction === 'in') rows = rows.filter(row => row.to?.toLowerCase() === focus);
+    if (state.direction === 'out') rows = rows.filter(row => row.from?.toLowerCase() === focus);
+  }
+  rows = rows.slice(0, 300);
 
-  elements.transferSource.textContent = `Transfer source: ETH ${formatNumber(ethCount)} + Base ${formatNumber(baseCount)} all-time indexed transfers`;
-  if (elements.baseTransactionsLink) elements.baseTransactionsLink.href = data.transactions?.explorerLinks?.base || BASESCAN_TX_URL;
-  if (elements.ethTransactionsLink) elements.ethTransactionsLink.href = data.transactions?.explorerLinks?.ethereum || ETHERSCAN_TX_URL;
-  elements.activityUpdated.textContent = fetched
-    ? `Updated ${fetched.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`
-    : 'Update time unavailable';
+  const baseLoaded = Number(data.transactions?.baseLoadedRows || data.base?.transfers?.length || 0);
+  const totalCount = data.transactions?.totalCount ?? data.totals?.allChainTransactions;
+  if (elements.activityStatus) {
+    elements.activityStatus.textContent = rows.length
+      ? `Showing ${rows.length.toLocaleString()} latest rows${Number.isFinite(Number(totalCount)) ? ` of ${formatNumber(totalCount)} indexed CHI transactions` : ''}. Base rows loaded: ${baseLoaded.toLocaleString()}.`
+      : 'No CHI transaction records were returned by the live sources.';
+  }
 
-  if (!totalLoaded) {
-    elements.activityStatus.textContent = 'No CHI transaction records were returned by the live sources.';
-    elements.activityRows.innerHTML = '<tr><td colspan="7" class="empty-state">No ETH or Base CHI transfers were returned. Use “Refresh TXN” to retry, or open the explorer links below.</td></tr>';
+  if (!rows.length) {
+    elements.activityRows.innerHTML = '<tr><td colspan="7" class="empty-state">No ETH or Base CHI transfers were returned. Click Refresh TXN or open the explorer links.</td></tr>';
     return;
   }
 
-  if (!transfers.length) {
-    const message = focusWallet
-      ? 'No CHI in/out transfers matched that wallet in the latest loaded records.'
-      : 'No CHI transfers matched the selected filter.';
-    elements.activityStatus.textContent = message;
-    elements.activityRows.innerHTML = `<tr><td colspan="7" class="empty-state">${escapeHtml(message)}</td></tr>`;
-    return;
-  }
-
-  const focusText = focusWallet ? ` for ${shortHash(focusWallet, 8, 6)}` : '';
-  elements.activityStatus.textContent = `Showing ${transfers.length} latest rows of ${formatNumber((data.transactions?.totalCount ?? totalLoaded))} indexed CHI transaction${totalLoaded === 1 ? '' : 's'}${focusText}. Source Wallet is the ERC-20 CHI From wallet; Recipient is the ERC-20 CHI To wallet.`;
-  elements.activityRows.innerHTML = transfers.map(item => {
-    const tx = item.transactionHash || '';
-    const from = item.from || '';
-    const to = item.to || '';
-    const flow = flowForTransfer(item, focusWallet);
-    const txLink = item.transactionUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/tx/${tx}` : `https://basescan.org/tx/${tx}`);
-    const sourceWallet = item.sourceWallet || from;
-    const sourceLink = item.sourceWalletUrl || item.fromUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/address/${sourceWallet}` : `https://basescan.org/address/${sourceWallet}`);
-    const toLink = item.toUrl || (item.chainKey === 'ethereum' ? `https://etherscan.io/address/${to}` : `https://basescan.org/address/${to}`);
+  elements.activityRows.innerHTML = rows.map(row => {
+    const chainClass = row.chainKey === 'base' ? 'base-chip' : 'eth-chip';
+    const flowClass = row.event === 'Mint' ? 'in-chip' : row.event === 'Burn' ? 'out-chip' : 'transfer-chip';
     return `
       <tr>
-        <td title="${escapeHtml(item.timestamp || '')}">${escapeHtml(relativeTime(item.timestamp))}</td>
-        <td><span class="chain-pill ${chainClass(item.chainKey)}">${escapeHtml(item.chain || 'Chain')}</span></td>
-        <td><span class="flow-tag ${flowClass(flow)}">${escapeHtml(flow)}</span></td>
-        <td><a class="mono-link" href="${sourceLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(sourceWallet)}">${escapeHtml(shortHash(sourceWallet))}</a></td>
-        <td><a class="mono-link" href="${toLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(to)}">${escapeHtml(shortHash(to))}</a></td>
-        <td class="amount-cell">${escapeHtml(formatDecimalString(item.amount))}</td>
-        <td><a class="mono-link" href="${txLink}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(tx)}">${escapeHtml(shortHash(tx, 9, 6))} ↗</a></td>
+        <td>${relativeTime(row.timestamp)}</td>
+        <td><span class="chain-chip ${chainClass}">${escapeHtml(row.chain || row.chainKey || '—')}</span></td>
+        <td><span class="flow-chip ${flowClass}">${escapeHtml(row.event || 'Transfer')}</span></td>
+        <td><a href="${escapeAttr(row.fromUrl || '#')}" target="_blank" rel="noopener noreferrer">${escapeHtml(shortAddress(row.from))}</a></td>
+        <td><a href="${escapeAttr(row.toUrl || '#')}" target="_blank" rel="noopener noreferrer">${escapeHtml(shortAddress(row.to))}</a></td>
+        <td>${escapeHtml(formatAmount(row.amount))}</td>
+        <td><a href="${escapeAttr(row.transactionUrl || '#')}" target="_blank" rel="noopener noreferrer">${escapeHtml(shortAddress(row.transactionHash))} ↗</a></td>
       </tr>`;
   }).join('');
 }
 
-function renderStatus(data) {
-  const warnings = Array.isArray(data.warnings) ? data.warnings : [];
-  if (!data.ok) {
-    setConnection('bad', 'Live sources unavailable');
-  } else if (warnings.length) {
-    setConnection('warn', `Live with ${warnings.length} source warning${warnings.length === 1 ? '' : 's'}`);
-  } else {
-    setConnection('good', 'Live sources connected');
-  }
-
-  const fetched = normalizeTimestamp(data.fetchedAt);
-  elements.lastUpdated.textContent = fetched
-    ? `Updated ${fetched.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`
-    : 'Update time unavailable';
+function renderEmpty(message) {
+  elements.ethHolders && (elements.ethHolders.textContent = '—');
+  elements.baseHolders && (elements.baseHolders.textContent = '—');
+  elements.chainTotal && (elements.chainTotal.textContent = '—');
+  elements.allChainTransactions && (elements.allChainTransactions.textContent = '—');
+  elements.activityStatus && (elements.activityStatus.textContent = message || 'No live data.');
 }
 
-async function loadLiveData({ manual = false } = {}) {
-  if (state.loading) return;
-  state.loading = true;
-  if (manual) setRefreshButton({ loading: true });
-  if (manual || !state.data) setConnection('loading', 'Refreshing live sources…');
-  else setConnection('loading', 'Refreshing in background…');
-  if (elements.activityStatus && manual) elements.activityStatus.textContent = 'Refreshing all-chain CHI transactions…';
-
-  try {
-    const params = new URLSearchParams();
-    if (manual) {
-      params.set('force', '1');
-      params.set('t', String(Date.now()));
-    }
-
-    const apiTarget = params.toString() ? `${API_URL}?${params.toString()}` : API_URL;
-    const response = await fetch(apiTarget, {
-      method: 'GET',
-      headers: { accept: 'application/json' },
-      cache: manual ? 'no-store' : 'default'
-    });
-
-    if (!response.ok) throw new Error(`Live endpoint returned HTTP ${response.status}`);
-    const rawData = await response.json();
-    const data = mergeWithLastGood(rawData);
-    rememberGood(data);
-    state.data = data;
-    renderMetrics(data);
-    renderActivity(data);
-    renderStatus(data);
-    if (manual) setRefreshButton({ success: true });
-  } catch (error) {
-    setConnection('bad', 'Live connection failed');
-    elements.lastUpdated.textContent = error instanceof Error ? error.message : 'Unknown refresh error';
-    if (elements.activityStatus) elements.activityStatus.textContent = 'CHI transaction refresh failed.';
-    if (!state.data && elements.activityRows) {
-      elements.activityRows.innerHTML = '<tr><td colspan="7" class="empty-state">The live endpoint could not be reached. Vercel will retry on the next automatic refresh.</td></tr>';
-    }
-    if (manual) setRefreshButton({ error: true });
-  } finally {
-    state.loading = false;
-    if (!manual) {
-      elements.sidebarRefresh.disabled = false;
-      if (elements.activityRefresh) elements.activityRefresh.disabled = false;
-    }
-  }
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
 }
 
-function scheduleRefresh() {
-  clearInterval(state.timer);
-  state.timer = setInterval(() => loadLiveData(), REFRESH_MS);
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/'/g, '&#39;');
 }
 
-function rerenderActivityFromControls() {
-  if (!state.data) return;
-  state.focusWallet = elements.walletFocusInput?.value || '';
-  state.direction = elements.directionFilter?.value || 'all';
-  renderActivity(state.data);
-}
-
-elements.sidebarRefresh.addEventListener('click', () => loadLiveData({ manual: true }));
-if (elements.activityRefresh) {
-  elements.activityRefresh.addEventListener('click', () => loadLiveData({ manual: true }));
-}
-if (elements.walletFocusInput) {
-  elements.walletFocusInput.addEventListener('input', rerenderActivityFromControls);
-}
-if (elements.directionFilter) {
-  elements.directionFilter.addEventListener('change', rerenderActivityFromControls);
-}
-if (elements.clearWalletFilter) {
-  elements.clearWalletFilter.addEventListener('click', () => {
-    if (elements.walletFocusInput) elements.walletFocusInput.value = '';
-    if (elements.directionFilter) elements.directionFilter.value = 'all';
+function setupEvents() {
+  elements.sidebarRefresh?.addEventListener('click', () => refresh(true));
+  elements.activityRefresh?.addEventListener('click', () => refresh(true));
+  elements.walletFocusInput?.addEventListener('input', event => {
+    state.focusWallet = event.target.value;
+    renderRows(bestData() || {});
+  });
+  elements.directionFilter?.addEventListener('change', event => {
+    state.direction = event.target.value;
+    renderRows(bestData() || {});
+  });
+  elements.clearWalletFilter?.addEventListener('click', () => {
     state.focusWallet = '';
     state.direction = 'all';
-    if (state.data) renderActivity(state.data);
+    if (elements.walletFocusInput) elements.walletFocusInput.value = '';
+    if (elements.directionFilter) elements.directionFilter.value = 'all';
+    renderRows(bestData() || {});
   });
 }
 
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') loadLiveData();
-});
-
-loadLiveData();
-scheduleRefresh();
+setupEvents();
+if (state.lastGood) {
+  state.data = state.lastGood;
+  render();
+  setStatus('warning', 'Showing last good data');
+}
+refresh(false);
+state.timer = setInterval(() => refresh(false), REFRESH_MS);

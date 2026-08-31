@@ -1,13 +1,15 @@
-# Source Notes — V22
+# Source Notes
 
-Base CHI contract:
+Contracts:
 
-`0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
+- Ethereum CHI: `0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`
+- Base CHI: `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
 
-V22 stops treating Base holder count as a separate scraper/API problem. It pulls Base CHI ERC-20 Transfer events using the explorer token-transfer API, counts the transfers, and computes current holders by replaying Transfer balances from the full transfer history.
+V23 changes:
 
-This avoids three prior failure modes:
-
-1. BaseScan page mirrors being slow, stale, or unavailable.
-2. Blockscout Base counters disagreeing with BaseScan.
-3. Failed Base refreshes overwriting good values with `0`.
+- Base was rebuilt as a standalone source path.
+- `/api/base` returns Base-only diagnostics.
+- Base holders and Base TXN totals prioritize the visible BaseScan token page.
+- Base latest rows use ERC-20 token transfer feeds.
+- Failed Base refreshes do not become `0`.
+- Browser localStorage and server memory cache preserve last good Base values.
