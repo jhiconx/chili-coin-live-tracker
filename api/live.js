@@ -259,28 +259,6 @@ async function legacyApi(root, params, timeoutMs = TIMEOUT_FAST_MS) {
   throw new Error(msg);
 }
 
-
-async function fetchEthScanVisibleCounts() {
-  const attempts = [
-    { name: 'Etherscan token page', url: ETHERSCAN_TOKEN_URL, timeoutMs: TIMEOUT_FAST_MS },
-    { name: 'Etherscan token page via text mirror', url: `https://r.jina.ai/${ETHERSCAN_TOKEN_URL}`, timeoutMs: TIMEOUT_SLOW_MS }
-  ];
-  const errors = [];
-  for (const attempt of attempts) {
-    try {
-      const text = await fetchText(attempt.url, attempt.timeoutMs);
-      const counts = parseBaseScanCounts(text);
-      if (counts.holders !== null || counts.transfers !== null) {
-        return { ...counts, source: attempt.name, sourceUrl: ETHERSCAN_TOKEN_URL };
-      }
-      throw new Error('Etherscan counts were not found in response text');
-    } catch (error) {
-      errors.push(`${attempt.name}: ${error.message}`);
-    }
-  }
-  throw new Error(errors.join(' | '));
-}
-
 async function fetchBaseLatestTransfers() {
   const chain = {
     key: 'base', label: 'Base', token: BASE_TOKEN,
@@ -372,21 +350,18 @@ function mergeWithLastGood(current) {
 
 export async function buildLivePayload() {
   const fetchedAt = new Date().toISOString();
-  const [ethHolderResult, ethTransferResult, ethVisibleCountResult, baseResult] = await Promise.allSettled([
+  const [ethHolderResult, ethTransferResult, baseResult] = await Promise.allSettled([
     withTimeout(fetchEthHolders(), TIMEOUT_FAST_MS, 'Ethereum holders'),
     withTimeout(fetchEthTransfers(), TIMEOUT_SLOW_MS, 'Ethereum transfers'),
-    withTimeout(fetchEthScanVisibleCounts(), TIMEOUT_SLOW_MS, 'Ethereum visible transfer count'),
     withTimeout(fetchBaseStandalone(), TIMEOUT_SLOW_MS + 2000, 'Base standalone')
   ]);
 
   const warnings = [];
   const ethHolder = ethHolderResult.status === 'fulfilled' ? ethHolderResult.value : null;
   const ethTransfer = ethTransferResult.status === 'fulfilled' ? ethTransferResult.value : null;
-  const ethVisibleCounts = ethVisibleCountResult.status === 'fulfilled' ? ethVisibleCountResult.value : null;
   const base = baseResult.status === 'fulfilled' ? baseResult.value : null;
   if (!ethHolder) warnings.push(`Ethereum holder source unavailable: ${ethHolderResult.reason?.message || 'unknown'}`);
   if (!ethTransfer) warnings.push(`Ethereum transfer source unavailable: ${ethTransferResult.reason?.message || 'unknown'}`);
-  if (!ethVisibleCounts) warnings.push(`Ethereum visible transfer count unavailable: ${ethVisibleCountResult.reason?.message || 'unknown'}`);
   if (!base) warnings.push(`Base standalone source unavailable: ${baseResult.reason?.message || 'unknown'}`);
   if (base?.warnings?.length) warnings.push(...base.warnings);
 
@@ -396,7 +371,7 @@ export async function buildLivePayload() {
   const ethTransfers = ethTransfer?.rows || [];
   const baseTransfers = base?.transfers || [];
   const baseTransferCount = base?.transferCount ?? null;
-  const ethTransferCount = ethVisibleCounts?.transfers ?? (ethTransfers.length || null);
+  const ethTransferCount = ethTransfers.length || null; // This is latest loaded ETH rows when full count is unavailable.
   const allChainTransactions = Number.isFinite(baseTransferCount) && Number.isFinite(ethTransferCount) ? baseTransferCount + ethTransferCount : (baseTransferCount ?? ethTransferCount ?? null);
   const allRows = dedupeTransfers([...baseTransfers, ...ethTransfers]).sort(sortTransfers).slice(0, TABLE_LIMIT);
 
@@ -419,8 +394,6 @@ export async function buildLivePayload() {
       token: ethHolder?.token || null,
       transfers: ethTransfers,
       transferCount: ethTransferCount,
-      transferCountSource: ethVisibleCounts?.transfers !== null && ethVisibleCounts?.transfers !== undefined ? ethVisibleCounts.source : 'latest loaded Ethereum transfer rows',
-      transferCountSourceUrl: ethVisibleCounts?.sourceUrl || ETHERSCAN_TOKEN_URL,
       transferSource: ethTransfer?.source || null,
       transferSourceUrl: ethTransfer?.sourceUrl || null
     },
@@ -440,13 +413,12 @@ export async function buildLivePayload() {
     totals: {
       chainHolderTotal: chainTotal,
       allChainTransactions,
-      allChainTransactionsSource: Number.isFinite(baseTransferCount) && Number.isFinite(ethTransferCount) ? 'BaseScan visible transfer count + Etherscan visible transfer count' : 'Available visible transfer counts only',
+      allChainTransactionsSource: Number.isFinite(baseTransferCount) ? 'BaseScan visible transfer count + loaded Ethereum transfer rows' : 'Loaded transfer rows only',
       baseContributedToTxn: Number.isFinite(baseTransferCount)
     },
     transactions: {
       totalCount: allChainTransactions,
       ethLoadedRows: ethTransfers.length,
-      ethTotalCount: ethTransferCount,
       baseLoadedRows: baseTransfers.length,
       baseTotalCount: baseTransferCount,
       rows: allRows,

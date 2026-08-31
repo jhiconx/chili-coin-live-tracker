@@ -131,13 +131,12 @@ function mergeGoodData(incoming) {
     merged.base.transferSource = `${prior.base.transferSource || 'last good Base rows'} (last good)`;
   }
   const baseCount = Number(merged?.base?.transferCount);
-  const ethCount = Number(merged?.ethereum?.transferCount ?? merged?.transactions?.ethTotalCount ?? merged?.ethereum?.transfers?.length ?? 0);
-  if (Number.isFinite(baseCount) && Number.isFinite(ethCount)) {
+  const ethRows = Number(merged?.ethereum?.transfers?.length || 0);
+  if (Number.isFinite(baseCount)) {
     merged.totals = merged.totals || {};
-    merged.totals.allChainTransactions = baseCount + ethCount;
+    merged.totals.allChainTransactions = baseCount + ethRows;
     merged.transactions = merged.transactions || {};
-    merged.transactions.totalCount = baseCount + ethCount;
-    merged.transactions.ethTotalCount = ethCount;
+    merged.transactions.totalCount = baseCount + ethRows;
   }
   return merged;
 }
@@ -172,13 +171,12 @@ async function refresh(force = false) {
       if (base?.base) {
         data.base = { ...(data.base || {}), ...base.base };
         if (Number.isFinite(Number(base.base.transferCount))) {
-          const ethCount = Number(data.ethereum?.transferCount ?? data.transactions?.ethTotalCount ?? data.ethereum?.transfers?.length ?? 0);
+          const ethRows = Number(data.ethereum?.transfers?.length || 0);
           data.totals = data.totals || {};
           data.transactions = data.transactions || {};
-          data.totals.allChainTransactions = Number(base.base.transferCount) + ethCount;
-          data.transactions.totalCount = Number(base.base.transferCount) + ethCount;
+          data.totals.allChainTransactions = Number(base.base.transferCount) + ethRows;
+          data.transactions.totalCount = Number(base.base.transferCount) + ethRows;
           data.transactions.baseTotalCount = Number(base.base.transferCount);
-          data.transactions.ethTotalCount = ethCount;
         }
         if (base.base.transfers?.length) {
           data.transactions = data.transactions || {};
