@@ -1,15 +1,10 @@
-# Source Notes
+# Source Notes — V24
 
-Contracts:
+V24 removes the previous mixed Base logic and uses one source pattern for TXN totals:
 
-- Ethereum CHI: `0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`
-- Base CHI: `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`
+- Base TXN total = count of CHI ERC-20 transfer events returned from Etherscan API V2 with `chainid=8453` and `contractaddress=0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`.
+- Ethereum TXN total = count of CHI ERC-20 transfer events returned from Etherscan API V2 with `chainid=1` and `contractaddress=0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`.
+- Displayed all-chain TXN = Base TXN + Ethereum TXN.
 
-V23 changes:
-
-- Base was rebuilt as a standalone source path.
-- `/api/base` returns Base-only diagnostics.
-- Base holders and Base TXN totals prioritize the visible BaseScan token page.
-- Base latest rows use ERC-20 token transfer feeds.
-- Failed Base refreshes do not become `0`.
-- Browser localStorage and server memory cache preserve last good Base values.
+No Blockscout holder counters are used for the Base holder card.
+No failed Base response is converted into `0`.

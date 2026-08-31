@@ -1,38 +1,30 @@
-# Chili Coin Live Tracker — V23 Base Reset
+# Chili Coin Live Wallet Tracker — V24 Simple TXN Sum
 
-Full GitHub-ready code for the Chili Coin tracker.
+This build resets the TXN logic to exactly what was requested:
 
-## Upload
+**TXN = BaseScan CHI ERC-20 Transfers + Etherscan CHI ERC-20 Transfers**
 
-Upload all files and folders in this directory to the root of the GitHub repo:
+The backend pulls the full ERC-20 `tokentx` history for:
 
-- `index.html`
-- `styles.css`
-- `app.js`
-- `api/`
-- `assets/`
-- `README.md`
-- `SOURCE_NOTES.md`
+- Base CHI: `0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8`, chain `8453`
+- Ethereum CHI: `0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA`, chain `1`
 
-## Vercel
+It then counts the transfer events directly and adds them together. Holder counts are computed from the same full transfer histories, not from Blockscout.
 
-Environment variable name:
+Vercel environment variable required:
 
 ```text
 ETHERSCAN_API_KEY
 ```
 
-This version has a separate `/api/base` endpoint and keeps last-good Base data instead of replacing it with zero.
-
-Test after deployment:
+After deploying, test:
 
 ```text
-https://chili-coin-live-tracker.vercel.app/api/live?force=1
-https://chili-coin-live-tracker.vercel.app/api/base?force=1
+/api/live?force=1
 ```
 
 Search for:
 
 ```text
-v23-base-reset-standalone
+v24-simple-txn-sum
 ```
