@@ -7,9 +7,9 @@ const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
 const BASESCAN_TOKEN_URL = `https://basescan.org/token/${BASE_TOKEN}`;
 
-// V18: Base TXN reliability fix.
-// Base transfer rows and Base TXN totals are split from holder loading and use BaseScan legacy tokentx, Etherscan V2 tokentx, BaseScan text counts, and public indexer fallback.
-// The combined transaction table intentionally keeps Base rows visible instead of letting Ethereum rows crowd them out.
+// V19: transfer-log fix.
+// TXN totals and rows use ERC-20 Transfer event logs, which match the explorer transfer tab better than tokentx fallbacks.
+// Base rows are loaded independently so a slow holder-count source does not hide Base activity.
 const FAST_TIMEOUT_MS = 5_500;
 const EXPLORER_TIMEOUT_MS = 8_500;
 const BASESCAN_HINT_TIMEOUT_MS = 2_500;
@@ -114,22 +114,11 @@ async function fetchEtherscanHolderCount(chain) {
 }
 
 async function fetchEtherscanTokenTransferCount(chain) {
-  const result = await fetchEtherscanV2({
-    chainid: chainIdFor(chain),
-    module: 'account',
-    action: 'tokentx',
-    contractaddress: chain.token,
-    startblock: 0,
-    endblock: 99999999,
-    page: 1,
-    offset: 10000,
-    sort: 'desc'
-  }, EXPLORER_TIMEOUT_MS * 3);
-  const items = Array.isArray(result) ? result : [];
+  const data = await fetchTransferLogsByExplorer(chain, chain.key === 'base' ? 6 : 3, 1000, EXPLORER_TIMEOUT_MS * 2);
   return {
     holders: null,
-    transfers: items.length,
-    source: items.length >= 10000 ? `${chain.label} Etherscan API tokentx transfer count capped at 10000` : `${chain.label} Etherscan API tokentx transfer count`,
+    transfers: data.totalTransferCount,
+    source: `${chain.label} Etherscan API Transfer log count`,
     sourceUrl: chain.transferExplorer
   };
 }
@@ -223,39 +212,7 @@ function normalizeEtherscanTokenTx(item, chain) {
 }
 
 async function fetchEtherscanTokenTransfers(chain) {
-  const offset = TX_ROW_OFFSET;
-  const result = await fetchEtherscanV2({
-    chainid: chainIdFor(chain),
-    module: 'account',
-    action: 'tokentx',
-    contractaddress: chain.token,
-    startblock: 0,
-    endblock: 99999999,
-    page: 1,
-    offset,
-    sort: 'desc'
-  }, EXPLORER_TIMEOUT_MS * 2);
-  const items = Array.isArray(result) ? result : [];
-  const transfers = [];
-  const seen = new Set();
-  for (const item of items) {
-    const transfer = normalizeEtherscanTokenTx(item, chain);
-    if (!transfer) continue;
-    const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfer.from}:${transfer.to}:${transfer.amountRaw}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (transfers.length < TABLE_RECORD_LIMIT) transfers.push(transfer);
-  }
-  return {
-    transfers,
-    visibleTransferCount: transfers.length,
-    // If we hit the requested row limit, the explorer has more rows than we loaded.
-    // Leave totalTransferCount null so the card can use the separate official transfer total.
-    totalTransferCount: items.length < offset ? items.length : null,
-    source: `${chain.label} Etherscan API ERC-20 tokentx latest rows`,
-    sourceUrl: chain.transferExplorer,
-    capped: items.length >= offset
-  };
+  return fetchTransferLogsByExplorer(chain, chain.key === 'base' ? 6 : 3, 1000, EXPLORER_TIMEOUT_MS * 2);
 }
 
 function decodeEntities(value) {
@@ -441,35 +398,21 @@ async function fetchBaseScanLegacyTokenTx(params = {}, timeoutMs = EXPLORER_TIME
 }
 
 async function fetchBaseScanLegacyTokenTransferCount(timeoutMs = EXPLORER_TIMEOUT_MS * 3) {
-  const items = await fetchBaseScanLegacyTokenTx({ page: 1, offset: 10000, sort: 'desc' }, timeoutMs);
+  const data = await fetchTransferLogsByExplorer(chainConfigs.base, 6, 1000, timeoutMs);
   return {
     holders: null,
-    transfers: items.length,
-    source: items.length >= 10000 ? 'BaseScan API tokentx transfer count capped at 10000' : 'BaseScan API tokentx transfer count',
+    transfers: data.totalTransferCount,
+    source: 'BaseScan/Etherscan Transfer log count',
     sourceUrl: BASESCAN_URL
   };
 }
 
 async function fetchBaseScanLegacyTokenTransfers(timeoutMs = EXPLORER_TIMEOUT_MS * 2) {
-  const items = await fetchBaseScanLegacyTokenTx({ page: 1, offset: TX_ROW_OFFSET, sort: 'desc' }, timeoutMs);
-  const transfers = [];
-  const seen = new Set();
-  for (const item of items) {
-    const transfer = normalizeEtherscanTokenTx(item, chainConfigs.base);
-    if (!transfer) continue;
-    transfer.sourceName = 'Base BaseScan API token transfers';
-    const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfer.from}:${transfer.to}:${transfer.amountRaw}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (transfers.length < TABLE_RECORD_LIMIT) transfers.push(transfer);
-  }
+  const data = await fetchTransferLogsByExplorer(chainConfigs.base, 6, 1000, timeoutMs);
   return {
-    transfers,
-    visibleTransferCount: transfers.length,
-    totalTransferCount: items.length < TX_ROW_OFFSET ? items.length : null,
-    source: 'BaseScan API ERC-20 tokentx latest rows',
-    sourceUrl: BASESCAN_URL,
-    capped: items.length >= TX_ROW_OFFSET
+    ...data,
+    source: 'BaseScan/Etherscan ERC-20 Transfer logs',
+    sourceUrl: BASESCAN_URL
   };
 }
 
@@ -537,6 +480,141 @@ function decimalAmount(rawValue, rawDecimals) {
   const whole = decimals === 0 ? padded : padded.slice(0, -decimals);
   const fraction = decimals === 0 ? '' : padded.slice(-decimals).replace(/0+$/, '');
   return fraction ? `${whole}.${fraction}` : whole;
+}
+
+function parseExplorerInt(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  const text = String(value);
+  if (/^0x[0-9a-f]+$/i.test(text)) return Number.parseInt(text, 16) || 0;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseExplorerTimestamp(value) {
+  const n = parseExplorerInt(value);
+  if (!n) return null;
+  return new Date(n * 1000).toISOString();
+}
+
+function topicToAddress(topic) {
+  const text = String(topic || '').toLowerCase();
+  if (!/^0x[0-9a-f]{64}$/.test(text)) return '';
+  return `0x${text.slice(-40)}`;
+}
+
+function hexToDecimalString(value) {
+  const text = String(value || '0x0').trim();
+  try {
+    if (/^0x[0-9a-f]*$/i.test(text)) return BigInt(text || '0x0').toString();
+    if (/^[0-9]+$/.test(text)) return BigInt(text).toString();
+  } catch (_) {}
+  return '0';
+}
+
+async function fetchEtherscanV2Raw(params, timeoutMs = EXPLORER_TIMEOUT_MS) {
+  const apiKey = getExplorerApiKey();
+  if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not configured or is not a valid Etherscan key');
+  const url = new URL('https://api.etherscan.io/v2/api');
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== null && value !== undefined && value !== '') url.searchParams.set(key, String(value));
+  }
+  url.searchParams.set('apikey', apiKey);
+  const data = await fetchJson(url.toString(), timeoutMs);
+  if (data.status === '1') return Array.isArray(data.result) ? data.result : data.result;
+  const msg = String(data.message || data.result || 'Etherscan API request failed');
+  if (/no records found/i.test(msg)) return [];
+  throw new Error(msg);
+}
+
+function normalizeEtherscanLogTransfer(item, chain) {
+  const topics = Array.isArray(item.topics) ? item.topics : [];
+  const topic0 = String(topics[0] || item.topic0 || '').toLowerCase();
+  if (topic0 && topic0 !== TRANSFER_TOPIC.toLowerCase()) return null;
+  const from = topicToAddress(topics[1] || item.topic1);
+  const to = topicToAddress(topics[2] || item.topic2);
+  const transactionHash = String(item.transactionHash || item.hash || '').toLowerCase();
+  if (!transactionHash || !from || !to) return null;
+
+  let event = 'Transfer';
+  if (from === ZERO_ADDRESS) event = 'Mint';
+  else if (to === ZERO_ADDRESS) event = 'Burn';
+
+  const decimals = 18;
+  const amountRaw = hexToDecimalString(item.data || item.value || '0x0');
+  const logIndex = parseExplorerInt(item.logIndex ?? item.transactionIndex ?? 0);
+  const blockNumber = parseExplorerInt(item.blockNumber);
+  const timestamp = parseExplorerTimestamp(item.timeStamp || item.timestamp);
+
+  return {
+    chain: chain.label,
+    chainKey: chain.key,
+    transactionHash,
+    transactionUrl: `${chain.txExplorer}/${transactionHash}`,
+    blockNumber: String(blockNumber || ''),
+    timestamp,
+    from,
+    to,
+    fromUrl: `${chain.addressExplorer}/${from}`,
+    toUrl: `${chain.addressExplorer}/${to}`,
+    event,
+    amount: decimalAmount(amountRaw, decimals),
+    amountRaw,
+    decimals,
+    tokenSymbol: 'CHI',
+    sourceWallet: from,
+    sourceWalletUrl: `${chain.addressExplorer}/${from}`,
+    transactionInitiator: null,
+    calledContract: chain.token.toLowerCase(),
+    methodId: null,
+    functionName: null,
+    logIndex: String(logIndex),
+    sourceKind: 'erc20-transfer-log',
+    sourceName: `${chain.label} Etherscan API Transfer logs`
+  };
+}
+
+async function fetchTransferLogsByExplorer(chain, maxPages = 6, pageSize = 1000, timeoutMs = EXPLORER_TIMEOUT_MS * 2) {
+  const pageNumbers = Array.from({ length: maxPages }, (_, i) => i + 1);
+  const pageResults = await Promise.allSettled(pageNumbers.map(page => fetchEtherscanV2Raw({
+    chainid: chainIdFor(chain),
+    module: 'logs',
+    action: 'getLogs',
+    fromBlock: 0,
+    toBlock: 'latest',
+    address: chain.token,
+    topic0: TRANSFER_TOPIC,
+    page,
+    offset: pageSize
+  }, timeoutMs)));
+
+  const raw = [];
+  const errors = [];
+  for (const result of pageResults) {
+    if (result.status === 'fulfilled' && Array.isArray(result.value)) raw.push(...result.value);
+    if (result.status === 'rejected') errors.push(result.reason?.message || String(result.reason));
+  }
+  if (!raw.length && errors.length) throw new Error(errors.join(' | '));
+
+  const seen = new Set();
+  const transfers = [];
+  for (const item of raw) {
+    const transfer = normalizeEtherscanLogTransfer(item, chain);
+    if (!transfer) continue;
+    const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex}:${transfer.from}:${transfer.to}:${transfer.amountRaw}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    transfers.push(transfer);
+  }
+
+  const sorted = transfers.sort(sortTransfers);
+  return {
+    transfers: sorted.slice(0, TABLE_RECORD_LIMIT),
+    visibleTransferCount: Math.min(sorted.length, TABLE_RECORD_LIMIT),
+    totalTransferCount: sorted.length,
+    source: `${chain.label} Etherscan API Transfer logs`,
+    sourceUrl: chain.transferExplorer,
+    capped: raw.length >= maxPages * pageSize
+  };
 }
 
 function getHash(value) {
@@ -906,9 +984,9 @@ export default async function handler(req, res) {
       baseToken: BASE_TOKEN
     },
     dataMode: {
-      mode: 'v18-base-txn-visible-fix',
+      mode: 'v19-transfer-log-fix',
       explorerApiKeyConfigured: Boolean(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY),
-      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Holder totals, all-time TXN totals, and latest TXN rows load separately. Base TXN uses BaseScan tokentx first and the table keeps Base rows visible.' : 'No valid ETHERSCAN_API_KEY detected. Base counts and Base transfers load separately from public sources; BaseScan link remains the official review source.'
+      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Holder totals, all-time TXN totals, and latest TXN rows load separately. Base TXN uses ERC-20 Transfer logs first and the table keeps Base rows visible.' : 'No valid ETHERSCAN_API_KEY detected. Base counts and Base transfers use public fallbacks; BaseScan link remains the official review source.'
     },
     ethereum,
     base,
