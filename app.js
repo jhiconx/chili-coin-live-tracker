@@ -1,7 +1,7 @@
 const API_URL = '/api/live';
 const BASE_API_URL = '/api/base';
 const REFRESH_MS = 20_000;
-const LAST_GOOD_KEY = 'chiliTrackerLastGoodV24';
+const LAST_GOOD_KEY = 'chiliTrackerLastGoodV23';
 
 const state = {
   data: null,
@@ -131,7 +131,7 @@ function mergeGoodData(incoming) {
     merged.base.transferSource = `${prior.base.transferSource || 'last good Base rows'} (last good)`;
   }
   const baseCount = Number(merged?.base?.transferCount);
-  const ethCount = Number(merged?.ethereum?.transferCount ?? merged?.transactions?.ethTotalCount);
+  const ethCount = Number(merged?.ethereum?.transferCount ?? merged?.transactions?.ethTotalCount ?? merged?.ethereum?.transfers?.length ?? 0);
   if (Number.isFinite(baseCount) && Number.isFinite(ethCount)) {
     merged.totals = merged.totals || {};
     merged.totals.allChainTransactions = baseCount + ethCount;
@@ -172,15 +172,13 @@ async function refresh(force = false) {
       if (base?.base) {
         data.base = { ...(data.base || {}), ...base.base };
         if (Number.isFinite(Number(base.base.transferCount))) {
-          const ethCount = Number(data.ethereum?.transferCount ?? data.transactions?.ethTotalCount);
+          const ethCount = Number(data.ethereum?.transferCount ?? data.transactions?.ethTotalCount ?? data.ethereum?.transfers?.length ?? 0);
           data.totals = data.totals || {};
           data.transactions = data.transactions || {};
-          if (Number.isFinite(ethCount)) {
-            data.totals.allChainTransactions = Number(base.base.transferCount) + ethCount;
-            data.transactions.totalCount = Number(base.base.transferCount) + ethCount;
-            data.transactions.ethTotalCount = ethCount;
-          }
+          data.totals.allChainTransactions = Number(base.base.transferCount) + ethCount;
+          data.transactions.totalCount = Number(base.base.transferCount) + ethCount;
           data.transactions.baseTotalCount = Number(base.base.transferCount);
+          data.transactions.ethTotalCount = ethCount;
         }
         if (base.base.transfers?.length) {
           data.transactions = data.transactions || {};
