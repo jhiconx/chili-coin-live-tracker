@@ -2,7 +2,7 @@ const API_URL = '/api/live';
 const BASESCAN_TX_URL = 'https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#transactions';
 const ETHERSCAN_TX_URL = 'https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA#tokentxns';
 const REFRESH_MS = 20_000;
-const LAST_GOOD_KEY = 'chiliTrackerLastGoodV21';
+const LAST_GOOD_KEY = 'chiliTrackerLastGoodV22';
 
 const state = {
   data: null,

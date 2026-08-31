@@ -1,5 +1,28 @@
-# Chili Coin Live Tracker — V21 Stable Sources
+# Chili Coin Live Tracker — V22 Base Rebuild
 
-This update fixes the Base/TXN instability by separating official explorer counts from latest-row transfer feeds and by preserving the last good refresh in the browser instead of overwriting valid Base values with zero or blank data when a source has a temporary miss.
+This replacement rebuilds the Base logic from scratch.
 
-Upload every file in this replacement folder to GitHub, including the `api` and `assets` folders.
+## What changed
+
+- Base no longer uses BaseScan page scraping.
+- Base no longer uses Blockscout holder counters.
+- Base holders are computed from the complete Base CHI ERC-20 Transfer history.
+- Base TXN is counted from the same complete Transfer history.
+- Base latest rows come from the same Transfer history.
+- If Base fails, the API leaves Base blank instead of replacing it with `0` or a wrong fallback value.
+
+## Upload
+
+Upload every file/folder in this replacement folder to the top level of the GitHub repository, including the full `api` folder.
+
+Commit message:
+
+`Rebuild Base from Transfer history`
+
+After Vercel redeploys, open:
+
+`https://chili-coin-live-tracker.vercel.app/api/live?force=1`
+
+Search for:
+
+`v22-base-rebuilt-from-transfer-history`
