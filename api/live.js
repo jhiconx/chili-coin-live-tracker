@@ -7,10 +7,9 @@ const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
 const BASESCAN_TOKEN_URL = `https://basescan.org/token/${BASE_TOKEN}`;
 
-// V17: official transfer-count fix.
-// Holder cards and the TXN card are calculated separately from the latest visible table rows.
-// With ETHERSCAN_API_KEY configured, the all-chain TXN card counts all indexed ERC-20 Transfer events by asking Etherscan/BaseScan for the full token-transfer list count.
-// The table still fetches only a small latest-row page so the site stays responsive.
+// V18: Base TXN reliability fix.
+// Base transfer rows and Base TXN totals are split from holder loading and use BaseScan legacy tokentx, Etherscan V2 tokentx, BaseScan text counts, and public indexer fallback.
+// The combined transaction table intentionally keeps Base rows visible instead of letting Ethereum rows crowd them out.
 const FAST_TIMEOUT_MS = 5_500;
 const EXPLORER_TIMEOUT_MS = 8_500;
 const BASESCAN_HINT_TIMEOUT_MS = 2_500;
@@ -59,7 +58,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = FAST_TIMEOUT_MS) 
         'accept-language': 'en-US,en;q=0.9',
         'cache-control': 'no-cache',
         pragma: 'no-cache',
-        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/12.0)',
+        'user-agent': 'Mozilla/5.0 (compatible; ChiliCoinLiveTracker/18.0)',
         ...(options.headers || {})
       }
     });
@@ -287,33 +286,74 @@ function asNumber(value) {
 function parseBaseScanTextCount(content, kind) {
   const raw = String(content || '');
   const plain = toPlainText(raw);
-  const holderPatterns = [
-    /\bHolders\b\s*([\d,]+)/i,
-    /####\s*Holders\s*([\d,]+)/i,
-    /Holders[\s\S]{0,300}?>([\d,]+)</i
-  ];
-  const transferPatterns = [
+
+  const firstReasonableNumber = (text, minimum = 0) => {
+    const nums = String(text || '').match(/\b\d[\d,]*\b/g) || [];
+    for (const item of nums) {
+      const value = asNumber(item);
+      if (Number.isInteger(value) && value >= minimum) return value;
+    }
+    return null;
+  };
+
+  const largestReasonableNumber = (text, minimum = 0, maximum = 999999999) => {
+    const nums = String(text || '').match(/\b\d[\d,]*\b/g) || [];
+    const values = nums.map(asNumber).filter(v => Number.isInteger(v) && v >= minimum && v <= maximum);
+    return values.length ? Math.max(...values) : null;
+  };
+
+  if (kind === 'holders') {
+    const patterns = [
+      /\bHolders\b\s*([\d,]+)/i,
+      /####\s*Holders\s*([\d,]+)/i,
+      /Holders[\s\S]{0,120}?([\d,]+)/i,
+      /\bHOLDERS\b[\s\S]{0,120}?([\d,]+)/i
+    ];
+    for (const source of [plain, raw]) {
+      for (const pattern of patterns) {
+        const match = source.match(pattern);
+        if (!match) continue;
+        const count = asNumber(match[1]);
+        if (Number.isInteger(count) && count >= 0) return count;
+      }
+    }
+    return null;
+  }
+
+  const exactTransferPatterns = [
     /A\s+total\s+of\s+([\d,]+)\s+token\s+transfers?\s+found/i,
     /A\s+total\s+of\s+([\d,]+)\s+transactions?\s+found/i,
     /A\s+total\s+of\s+([\d,]+)\s+transfers?\s+found/i,
     /([\d,]+)\s+token\s+transfers?\s+found/i,
     /([\d,]+)\s+transactions?\s+found/i,
-    /([\d,]+)\s+transfers?\s+found/i,
-    /\bTransfers\b\s*(?:Total\s*)?([\d,]+)/i,
-    /\bTransactions\b\s*(?:Total\s*)?([\d,]+)/i
+    /([\d,]+)\s+transfers?\s+found/i
   ];
-  const patterns = kind === 'holders' ? holderPatterns : transferPatterns;
   for (const source of [plain, raw]) {
-    for (const pattern of patterns) {
+    for (const pattern of exactTransferPatterns) {
       const match = source.match(pattern);
       if (!match) continue;
       const count = asNumber(match[1]);
       if (Number.isInteger(count) && count >= 0) return count;
     }
   }
+
+  // BaseScan overview often renders roughly as: TRANSFERS TOTAL 24H 2,876.
+  // Grab the number from the compact Transfers area, ignoring the literal 24H toggle.
+  const transferSection = plain.match(/\bTRANSFERS\b([\s\S]{0,450})/i) || plain.match(/\bTransfers\b([\s\S]{0,450})/i);
+  if (transferSection) {
+    const section = transferSection[1].replace(/\b24H\b/gi, ' ');
+    const count = largestReasonableNumber(section, 100, 10000000);
+    if (Number.isInteger(count)) return count;
+  }
+
+  const transactionSection = plain.match(/\btransactions?\b([\s\S]{0,450})/i);
+  if (transactionSection) {
+    const count = firstReasonableNumber(transactionSection[1], 100);
+    if (Number.isInteger(count)) return count;
+  }
+
   return null;
 }
-
 function getManualNumber(name) {
   const value = process.env[name];
   const parsed = asNumber(value);
@@ -378,6 +418,58 @@ async function fetchBaseScanLegacyHolderListCount(timeoutMs = EXPLORER_TIMEOUT_M
     transfers: null,
     source: data.result.length >= 10000 ? 'BaseScan API tokenholderlist capped count' : 'BaseScan API tokenholderlist count',
     sourceUrl: BASESCAN_TOKEN_URL
+  };
+}
+
+
+async function fetchBaseScanLegacyTokenTx(params = {}, timeoutMs = EXPLORER_TIMEOUT_MS * 2) {
+  const apiKey = getExplorerApiKey();
+  if (!apiKey) throw new Error('No valid BaseScan/Etherscan API key configured');
+  const url = new URL('https://api.basescan.org/api');
+  url.searchParams.set('module', 'account');
+  url.searchParams.set('action', 'tokentx');
+  url.searchParams.set('contractaddress', BASE_TOKEN);
+  url.searchParams.set('startblock', '0');
+  url.searchParams.set('endblock', '99999999');
+  url.searchParams.set('page', String(params.page || 1));
+  url.searchParams.set('offset', String(params.offset || 300));
+  url.searchParams.set('sort', params.sort || 'desc');
+  url.searchParams.set('apikey', apiKey);
+  const data = await fetchJson(url.toString(), timeoutMs);
+  if (data.status !== '1' || !Array.isArray(data.result)) throw new Error(data.result || data.message || 'BaseScan tokentx failed');
+  return data.result;
+}
+
+async function fetchBaseScanLegacyTokenTransferCount(timeoutMs = EXPLORER_TIMEOUT_MS * 3) {
+  const items = await fetchBaseScanLegacyTokenTx({ page: 1, offset: 10000, sort: 'desc' }, timeoutMs);
+  return {
+    holders: null,
+    transfers: items.length,
+    source: items.length >= 10000 ? 'BaseScan API tokentx transfer count capped at 10000' : 'BaseScan API tokentx transfer count',
+    sourceUrl: BASESCAN_URL
+  };
+}
+
+async function fetchBaseScanLegacyTokenTransfers(timeoutMs = EXPLORER_TIMEOUT_MS * 2) {
+  const items = await fetchBaseScanLegacyTokenTx({ page: 1, offset: TX_ROW_OFFSET, sort: 'desc' }, timeoutMs);
+  const transfers = [];
+  const seen = new Set();
+  for (const item of items) {
+    const transfer = normalizeEtherscanTokenTx(item, chainConfigs.base);
+    if (!transfer) continue;
+    transfer.sourceName = 'Base BaseScan API token transfers';
+    const key = `${transfer.chainKey}:${transfer.transactionHash}:${transfer.logIndex || transfer.from}:${transfer.to}:${transfer.amountRaw}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (transfers.length < TABLE_RECORD_LIMIT) transfers.push(transfer);
+  }
+  return {
+    transfers,
+    visibleTransferCount: transfers.length,
+    totalTransferCount: items.length < TX_ROW_OFFSET ? items.length : null,
+    source: 'BaseScan API ERC-20 tokentx latest rows',
+    sourceUrl: BASESCAN_URL,
+    capped: items.length >= TX_ROW_OFFSET
   };
 }
 
@@ -648,9 +740,10 @@ async function fetchBaseOfficialCountersFast() {
 
   const attempts = [
     settleWithTimeout(fetchEtherscanHolderCount(chainConfigs.base), 5_500, 'Base Etherscan tokenholdercount'),
-    settleWithTimeout(fetchEtherscanTokenTransferCount(chainConfigs.base), 12_000, 'Base Etherscan tokentx transfer count'),
     settleWithTimeout(fetchBaseScanLegacyTokenInfo(5_500), 5_500, 'BaseScan tokeninfo'),
     settleWithTimeout(fetchBaseScanLegacyHolderListCount(7_500), 7_500, 'BaseScan tokenholderlist'),
+    settleWithTimeout(fetchBaseScanLegacyTokenTransferCount(16_000), 16_000, 'BaseScan tokentx transfer count'),
+    settleWithTimeout(fetchEtherscanTokenTransferCount(chainConfigs.base), 16_000, 'Base Etherscan tokentx transfer count'),
     settleWithTimeout(fetchBaseScanPageSummary(10_000), 10_000, 'BaseScan token page text mirror')
   ];
   const results = await Promise.all(attempts);
@@ -666,18 +759,24 @@ async function fetchBaseOfficialCountersFast() {
 async function fetchBaseTransfersFast() {
   const attempts = [];
   if (getExplorerApiKey()) {
-    attempts.push(settleWithTimeout(fetchEtherscanTokenTransfers(chainConfigs.base), 7_500, 'Base Etherscan tokentx'));
+    attempts.push(settleWithTimeout(fetchBaseScanLegacyTokenTransfers(8_500), 8_500, 'BaseScan legacy tokentx'));
+    attempts.push(settleWithTimeout(fetchEtherscanTokenTransfers(chainConfigs.base), 8_500, 'Base Etherscan V2 tokentx'));
   }
-  attempts.push(settleWithTimeout(fetchTokenTransfers(chainConfigs.base, 2), 5_500, 'Base public transfer rows'));
+  attempts.push(settleWithTimeout(fetchTokenTransfers(chainConfigs.base, 4), 7_500, 'Base public transfer rows'));
 
   const results = await Promise.all(attempts);
-  const etherscanResult = results.find(result =>
-    result.status === 'fulfilled' &&
-    result.value &&
-    String(result.value.source || '').toLowerCase().includes('etherscan') &&
-    (Array.isArray(result.value.transfers) || Number.isFinite(result.value.totalTransferCount))
-  );
-  if (etherscanResult) return etherscanResult.value;
+
+  const orderedSources = ['basescan api', 'etherscan api', 'blockscout'];
+  for (const sourceNeedle of orderedSources) {
+    const result = results.find(result =>
+      result.status === 'fulfilled' &&
+      result.value &&
+      Array.isArray(result.value.transfers) &&
+      result.value.transfers.length &&
+      String(result.value.source || '').toLowerCase().includes(sourceNeedle)
+    );
+    if (result) return result.value;
+  }
 
   const anyTransferResult = results.find(result =>
     result.status === 'fulfilled' &&
@@ -691,12 +790,11 @@ async function fetchBaseTransfersFast() {
     .map(result => result.reason?.message || String(result.reason));
   throw new Error(`Base transfer feed unavailable: ${errors.join(' | ')}`);
 }
-
 async function fetchBaseIndependentBundle() {
   const warnings = [];
   const [countersResult, transfersResult, tokenResult] = await Promise.all([
     settleWithTimeout(fetchBaseOfficialCountersFast(), 8_500, 'Base official counts'),
-    settleWithTimeout(fetchBaseTransfersFast(), 8_500, 'Base token transfers'),
+    settleWithTimeout(fetchBaseTransfersFast(), 10_500, 'Base token transfers'),
     settleWithTimeout(fetchTokenInfo(chainConfigs.base), 4_500, 'Base token metadata')
   ]);
 
@@ -786,7 +884,15 @@ export default async function handler(req, res) {
   const chainTotal = Number.isFinite(ethereum.holders) && Number.isFinite(base.holders)
     ? ethereum.holders + base.holders
     : null;
-  const allTransfers = [...(ethereum.transfers || []), ...(base.transfers || [])]
+  const preferredBaseRows = Array.isArray(base.transfers) ? base.transfers.slice(0, 160) : [];
+  const preferredEthRows = Array.isArray(ethereum.transfers) ? ethereum.transfers.slice(0, 160) : [];
+  const latestRows = [...(ethereum.transfers || []), ...(base.transfers || [])].sort(sortTransfers).slice(0, 160);
+  const combinedTransferMap = new Map();
+  for (const row of [...preferredBaseRows, ...preferredEthRows, ...latestRows]) {
+    const key = `${row.chainKey}:${row.transactionHash}:${row.logIndex || row.from}:${row.to}:${row.amountRaw}`;
+    if (!combinedTransferMap.has(key)) combinedTransferMap.set(key, row);
+  }
+  const allTransfers = Array.from(combinedTransferMap.values())
     .sort(sortTransfers)
     .slice(0, TABLE_RECORD_LIMIT);
   const allTransferTotal = (Number(ethereum.transferCount) || 0) + (Number(base.transferCount) || 0);
@@ -800,9 +906,9 @@ export default async function handler(req, res) {
       baseToken: BASE_TOKEN
     },
     dataMode: {
-      mode: 'v17-official-txn-count',
+      mode: 'v18-base-txn-visible-fix',
       explorerApiKeyConfigured: Boolean(process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY),
-      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Holder totals, all-time TXN totals, and latest TXN rows load separately. TXN card uses all-time transfer counts, not latest-row count.' : 'No valid ETHERSCAN_API_KEY detected. Base counts and Base transfers load separately; BaseScan link remains the official review source.'
+      note: getExplorerApiKey() ? 'Etherscan/BaseScan API is configured. Holder totals, all-time TXN totals, and latest TXN rows load separately. Base TXN uses BaseScan tokentx first and the table keeps Base rows visible.' : 'No valid ETHERSCAN_API_KEY detected. Base counts and Base transfers load separately from public sources; BaseScan link remains the official review source.'
     },
     ethereum,
     base,

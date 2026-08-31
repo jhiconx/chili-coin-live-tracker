@@ -37,6 +37,12 @@ Base holder counts and Base transfer rows now load as separate requests. A slow 
 
 This update keeps Base holder totals and Base transfer totals separate from the latest transaction-table rows. The TXN table now requests a smaller latest-row page from the Etherscan/BaseScan API so the table is less likely to time out, while the top TXN card can still use the official BaseScan-style all-time transfer count.
 
-## V17 Official TXN Count Fix
+## V18 Official TXN Count Fix
 
 The TXN card is now calculated from all-time ERC-20 token-transfer counts for each chain, while the table remains a latest-row preview. This prevents the TXN card from showing only 300 recent rows or partial latest-row counts when BaseScan shows a larger transfer total.
+
+
+## V18 update
+- Fixes Base TXN loading by trying BaseScan tokentx first, then Etherscan V2, then public indexer fallback.
+- Keeps Base rows visible in the CHI Transaction Flow table.
+- Improves BaseScan transfer-count parsing for the TXN card.
