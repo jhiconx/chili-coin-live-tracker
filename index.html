@@ -9,7 +9,7 @@
   <link rel="icon" href="/assets/favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" href="/assets/favicon.png" />
   <link rel="apple-touch-icon" href="/assets/favicon.png" />
-  <link rel="preload" href="/assets/chili-mascot.webp" as="image" type="image/webp" />
+  <link rel="preload" href="/assets/chili-mascot.png" as="image" type="image/png" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -18,7 +18,7 @@
 
   <header class="topbar">
     <a class="brand" href="#top" aria-label="Chili Coin home">
-      <img src="/assets/chili-ring.webp" alt="" width="44" height="44" />
+      <img src="/assets/brand-coin.png" alt="" width="44" height="44" />
       <span>Chili Coin</span>
     </a>
     <nav class="desktop-nav" aria-label="Primary navigation">
@@ -37,7 +37,7 @@
   <main id="top" class="layout">
     <aside class="sidebar">
       <div class="mascot-frame">
-        <img src="/assets/chili-mascot.webp" alt="Smiling Chili Coin mascot wearing a cap" />
+        <img src="/assets/brand-coin.png" alt="Chili Coin logo mark" />
       </div>
       <div class="sidebar-title">
         <strong>Chili Coin</strong>
@@ -68,6 +68,30 @@
           <div class="hero-meta">
             <span id="connectionStatus" class="connection-pill loading">Connecting to live sources…</span>
             <span id="lastUpdated">Not updated yet</span>
+          </div>
+        </div>
+        <div class="hero-mascot" aria-hidden="true">
+          <div class="hero-glow"></div>
+          <img src="/assets/chili-mascot.png" alt="" />
+        </div>
+      </section>
+
+      <section class="brand-ticker" aria-label="Brands and grocers distributing Chili Coin rewards">
+        <div class="ticker-label"><span class="live-dot"></span>Brands &amp; Grocers Distributing Chili</div>
+        <div class="ticker-track-wrap">
+          <div class="ticker-track">
+            <div class="ticker-item"><img src="/assets/coupon-iberia-sardines.webp" alt="Iberia Sardines in Vegetable Oil coupon" /></div>
+            <div class="ticker-item"><img src="/assets/coupon-iberia-blackbeans.webp" alt="Iberia Black Beans coupon" /></div>
+            <div class="ticker-item"><img src="/assets/coupon-iberia-coconut.webp" alt="Iberia Coconut Water with Pulp coupon" /></div>
+            <div class="ticker-item"><img src="/assets/coupon-badia-spices.webp" alt="Badia Complete Seasoning coupon" /></div>
+            <div class="ticker-item"><img src="/assets/coupon-badia-garlic.webp" alt="Badia Garlic Powder coupon" /></div>
+            <div class="ticker-item"><img src="/assets/coupon-iberia-plantain.webp" alt="Iberia Lightly Salted Plantain Chips coupon" /></div>
+            <div class="ticker-item" aria-hidden="true"><img src="/assets/coupon-iberia-sardines.webp" alt="" /></div>
+            <div class="ticker-item" aria-hidden="true"><img src="/assets/coupon-iberia-blackbeans.webp" alt="" /></div>
+            <div class="ticker-item" aria-hidden="true"><img src="/assets/coupon-iberia-coconut.webp" alt="" /></div>
+            <div class="ticker-item" aria-hidden="true"><img src="/assets/coupon-badia-spices.webp" alt="" /></div>
+            <div class="ticker-item" aria-hidden="true"><img src="/assets/coupon-badia-garlic.webp" alt="" /></div>
+            <div class="ticker-item" aria-hidden="true"><img src="/assets/coupon-iberia-plantain.webp" alt="" /></div>
           </div>
         </div>
       </section>
@@ -206,7 +230,7 @@
           <p><strong>Holder totals:</strong> The combined chain total adds the two chain-level figures. It is not a verified count of unique people or unique wallets because the same person or address may be represented on both chains.</p>
           <p><strong>Refresh behavior:</strong> The tracker polls public explorer and indexer data every 20 seconds. Explorer indexing may lag the newest blockchain records. The TXN card is designed to show the indexed ERC-20 transfer-event count across Ethereum and Base. Base rows prioritize the CHI ERC-20 Transfer event so the Source Wallet matches the wallet CHI flowed out of. For the closest BaseScan match, configure the server-side Etherscan/BaseScan V2 API key in Vercel.</p>
         </div>
-        <img src="/assets/chili-ring.webp" alt="Chili Coin circular mark" />
+        <img src="/assets/chili-ring.png" alt="Chili Coin circular mark" />
       </section>
 
       <section id="legal" class="legal-disclaimer">
