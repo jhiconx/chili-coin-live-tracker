@@ -617,7 +617,7 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
   gap: 30px;
   width: max-content;
   padding: 0 24px;
-  animation: ticker-scroll 42s linear infinite;
+  animation: ticker-scroll 56s linear infinite;
 }
 .ticker-track-wrap:hover .ticker-track { animation-play-state: paused; }
 .ticker-item {
@@ -635,5 +635,5 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 }
 @media (max-width: 600px) {
   .ticker-item { height: 150px; border-radius: 10px; }
-  .ticker-track { gap: 18px; animation-duration: 34s; }
+  .ticker-track { gap: 18px; animation-duration: 46s; }
 }
