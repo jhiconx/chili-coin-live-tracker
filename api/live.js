@@ -267,7 +267,6 @@ async function fetchBaseLatestTransfers() {
   };
   const attempts = [
     async () => etherscanV2({ chainid: '8453', module: 'account', action: 'tokentx', contractaddress: BASE_TOKEN, page: 1, offset: 100, sort: 'desc' }, TIMEOUT_FAST_MS),
-    async () => legacyApi('https://api.basescan.org/api', { module: 'account', action: 'tokentx', contractaddress: BASE_TOKEN, page: 1, offset: 100, sort: 'desc' }, TIMEOUT_FAST_MS),
     async () => legacyApi('https://base.blockscout.com/api', { module: 'account', action: 'tokentx', contractaddress: BASE_TOKEN, page: 1, offset: 100, sort: 'desc' }, TIMEOUT_FAST_MS)
   ];
   const errors = [];

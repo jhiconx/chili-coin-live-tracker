@@ -165,28 +165,34 @@ async function refresh(force = false) {
     const live = await fetchLive(force);
     let data = mergeGoodData(live);
 
-    // Base is also fetched independently. A good Base response overrides only Base values.
-    try {
-      const base = await fetchBase(force);
-      if (base?.base) {
-        data.base = { ...(data.base || {}), ...base.base };
-        if (Number.isFinite(Number(base.base.transferCount))) {
-          const ethRows = Number(data.ethereum?.transfers?.length || 0);
-          data.totals = data.totals || {};
-          data.transactions = data.transactions || {};
-          data.totals.allChainTransactions = Number(base.base.transferCount) + ethRows;
-          data.transactions.totalCount = Number(base.base.transferCount) + ethRows;
-          data.transactions.baseTotalCount = Number(base.base.transferCount);
+    // Base is fetched independently only as a fallback, when the main call above
+    // didn't already return usable Base data. Always double-fetching was pushing
+    // the shared API key over its per-second rate limit and causing failures on
+    // both chains, not just Base.
+    const hasGoodBase = Number.isFinite(Number(data.base?.holders)) && (data.base?.transfers?.length > 0);
+    if (!hasGoodBase) {
+      try {
+        const base = await fetchBase(force);
+        if (base?.base) {
+          data.base = { ...(data.base || {}), ...base.base };
+          if (Number.isFinite(Number(base.base.transferCount))) {
+            const ethRows = Number(data.ethereum?.transfers?.length || 0);
+            data.totals = data.totals || {};
+            data.transactions = data.transactions || {};
+            data.totals.allChainTransactions = Number(base.base.transferCount) + ethRows;
+            data.transactions.totalCount = Number(base.base.transferCount) + ethRows;
+            data.transactions.baseTotalCount = Number(base.base.transferCount);
+          }
+          if (base.base.transfers?.length) {
+            data.transactions = data.transactions || {};
+            const ethRows = data.ethereum?.transfers || [];
+            data.transactions.rows = [...base.base.transfers, ...ethRows].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+            data.transactions.baseLoadedRows = base.base.transfers.length;
+          }
         }
-        if (base.base.transfers?.length) {
-          data.transactions = data.transactions || {};
-          const ethRows = data.ethereum?.transfers || [];
-          data.transactions.rows = [...base.base.transfers, ...ethRows].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-          data.transactions.baseLoadedRows = base.base.transfers.length;
-        }
+      } catch (baseError) {
+        data.warnings = [...(data.warnings || []), `Independent Base endpoint failed: ${baseError.message}`];
       }
-    } catch (baseError) {
-      data.warnings = [...(data.warnings || []), `Independent Base endpoint failed: ${baseError.message}`];
     }
 
     state.data = data;
