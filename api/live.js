@@ -259,6 +259,22 @@ async function legacyApi(root, params, timeoutMs = TIMEOUT_FAST_MS) {
   throw new Error(msg);
 }
 
+async function fetchBaseBlockscoutV2(timeoutMs = TIMEOUT_FAST_MS) {
+  const data = await fetchJson(`https://base.blockscout.com/api/v2/tokens/${BASE_TOKEN}/transfers`, timeoutMs);
+  const items = Array.isArray(data.items) ? data.items : [];
+  return items.map(item => ({
+    hash: item.transaction_hash,
+    from: item.from?.hash,
+    to: item.to?.hash,
+    value: item.total?.value,
+    tokenDecimal: item.total?.decimals,
+    timeStamp: item.timestamp ? Math.floor(new Date(item.timestamp).getTime() / 1000) : null,
+    blockNumber: item.block_number,
+    contractAddress: item.token?.address || BASE_TOKEN,
+    logIndex: item.log_index
+  }));
+}
+
 async function fetchBaseLatestTransfers() {
   const chain = {
     key: 'base', label: 'Base', token: BASE_TOKEN,
@@ -266,7 +282,7 @@ async function fetchBaseLatestTransfers() {
     sourceName: 'Base CHI ERC-20 transfer feed'
   };
   const attempts = [
-    async () => legacyApi('https://base.blockscout.com/api', { module: 'account', action: 'tokentx', contractaddress: BASE_TOKEN, page: 1, offset: 100, sort: 'desc' }, TIMEOUT_FAST_MS),
+    async () => fetchBaseBlockscoutV2(TIMEOUT_FAST_MS),
     async () => etherscanV2({ chainid: '8453', module: 'account', action: 'tokentx', contractaddress: BASE_TOKEN, page: 1, offset: 100, sort: 'desc' }, TIMEOUT_FAST_MS)
   ];
   const errors = [];
