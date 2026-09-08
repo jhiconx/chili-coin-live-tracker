@@ -1,4 +1,4 @@
-import { buildLivePayload } from './live.js';
+import { fetchBaseStandalone } from './live.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -7,17 +7,16 @@ export default async function handler(req, res) {
   }
   res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  const payload = await buildLivePayload();
+  const base = await fetchBaseStandalone();
   return res.status(200).json({
-    ok: Boolean(payload.base),
-    mode: payload.dataMode?.mode,
-    fetchedAt: payload.fetchedAt,
-    base: payload.base,
+    ok: Boolean(base),
+    fetchedAt: base?.fetchedAt,
+    base,
     baseTxn: {
-      baseTotalCount: payload.transactions?.baseTotalCount,
-      baseLoadedRows: payload.transactions?.baseLoadedRows,
-      rows: payload.base?.transfers || []
+      baseTotalCount: base?.transferCount,
+      baseLoadedRows: base?.transfers?.length || 0,
+      rows: base?.transfers || []
     },
-    warnings: payload.warnings || []
+    warnings: base?.warnings || []
   });
 }

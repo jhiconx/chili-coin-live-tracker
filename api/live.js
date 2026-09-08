@@ -310,7 +310,7 @@ async function fetchEthTransfers() {
   return { rows, source: 'Ethereum Etherscan API token transfers', sourceUrl: ETHERSCAN_TX_URL };
 }
 
-async function fetchBaseStandalone() {
+export async function fetchBaseStandalone() {
   const fetchedAt = new Date().toISOString();
   const [countsResult, rowsResult] = await Promise.allSettled([
     withTimeout(fetchBaseScanVisibleCounts(), TIMEOUT_SLOW_MS, 'BaseScan visible counts'),
