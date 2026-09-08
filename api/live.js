@@ -6,6 +6,7 @@ const ETHERSCAN_TOKEN_URL = `https://etherscan.io/token/${ETH_TOKEN}`;
 const ETHERSCAN_TX_URL = `https://etherscan.io/token/${ETH_TOKEN}#tokentxns`;
 const BASESCAN_TOKEN_URL = `https://basescan.org/token/${BASE_TOKEN}`;
 const BASESCAN_TX_URL = `https://basescan.org/token/${BASE_TOKEN}#transactions`;
+const BASESCAN_TOKENTXNS_URL = `https://basescan.org/tokentxns?contractAddress=${BASE_TOKEN}`;
 
 const TIMEOUT_FAST_MS = 8000;
 const TIMEOUT_SLOW_MS = 15000;
@@ -114,10 +115,11 @@ function parseBaseScanCounts(content) {
 
     if (transfers === null) {
       const patterns = [
-        /\bTRANSFERS\b[\s\S]{0,800}?\bTOTAL\b[\s\S]{0,250}?([0-9][0-9,]*)/i,
-        /\bTRANSFERS\b[\s\S]{0,400}?([0-9][0-9,]*)/i,
+        /\bTRANSFERS\b[\s\S]{0,300}?\b(\d{1,3}(?:,\d{3})+)\b/i,
         /A total of\s*([0-9][0-9,]*)\s*(?:transactions|transfers)\s*found/i,
-        /"transfers[_A-Za-z]*"\s*:\s*"?([0-9][0-9,]*)"?/i
+        /"transfers[_A-Za-z]*"\s*:\s*"?([0-9][0-9,]*)"?/i,
+        /\bTRANSFERS\b[\s\S]{0,800}?\bTOTAL\b[\s\S]{0,250}?([0-9][0-9,]*)(?!\s*H\b)/i,
+        /\bTRANSFERS\b[\s\S]{0,400}?([0-9][0-9,]*)(?!\s*H\b)/i
       ];
       for (const pattern of patterns) {
         const match = source.match(pattern);
@@ -303,10 +305,31 @@ function scrapeBaseScanTransferRows(html) {
   return rows;
 }
 
+async function fetchEthTransferCount() {
+  const attempts = [
+    { name: 'Etherscan token page', url: ETHERSCAN_TOKEN_URL },
+    { name: 'Etherscan token page via text mirror', url: `https://r.jina.ai/${ETHERSCAN_TOKEN_URL}` }
+  ];
+  const errors = [];
+  for (const attempt of attempts) {
+    try {
+      const text = await fetchText(attempt.url, TIMEOUT_SLOW_MS);
+      const counts = parseBaseScanCounts(text);
+      if (counts.transfers !== null) return { count: counts.transfers, source: attempt.name };
+      throw new Error('transfer total not found in response text');
+    } catch (error) {
+      errors.push(`${attempt.name}: ${error.message}`);
+    }
+  }
+  throw new Error(errors.join(' | '));
+}
+
 async function fetchBaseScanScrapedRows(timeoutMs = TIMEOUT_SLOW_MS) {
   const attempts = [
-    { name: 'BaseScan page scrape', url: BASESCAN_TOKEN_URL },
-    { name: 'BaseScan page scrape via text mirror', url: `https://r.jina.ai/${BASESCAN_TOKEN_URL}` }
+    { name: 'BaseScan tokentxns page via text mirror', url: `https://r.jina.ai/${BASESCAN_TOKENTXNS_URL}` },
+    { name: 'BaseScan tokentxns page', url: BASESCAN_TOKENTXNS_URL },
+    { name: 'BaseScan overview page via text mirror', url: `https://r.jina.ai/${BASESCAN_TOKEN_URL}` },
+    { name: 'BaseScan overview page', url: BASESCAN_TOKEN_URL }
   ];
   const errors = [];
   for (const attempt of attempts) {
@@ -314,7 +337,9 @@ async function fetchBaseScanScrapedRows(timeoutMs = TIMEOUT_SLOW_MS) {
       const html = await fetchText(attempt.url, timeoutMs);
       const rows = scrapeBaseScanTransferRows(html);
       if (rows.length) return rows;
-      errors.push(`${attempt.name}: zero transfer rows found`);
+      const txLinkCount = (html.match(/\/tx\/0x[a-f0-9]{64}/gi) || []).length;
+      const addrLinkCount = (html.match(/\/address\/0x[a-f0-9]{40}/gi) || []).length;
+      errors.push(`${attempt.name}: zero rows (len=${html.length}, txLinks=${txLinkCount}, addrLinks=${addrLinkCount})`);
     } catch (error) {
       errors.push(`${attempt.name}: ${error.message}`);
     }
@@ -429,18 +454,21 @@ function mergeWithLastGood(current) {
 
 export async function buildLivePayload() {
   const fetchedAt = new Date().toISOString();
-  const [ethHolderResult, ethTransferResult, baseResult] = await Promise.allSettled([
+  const [ethHolderResult, ethTransferResult, ethTransferCountResult, baseResult] = await Promise.allSettled([
     withTimeout(fetchEthHolders(), TIMEOUT_FAST_MS, 'Ethereum holders'),
     withTimeout(fetchEthTransfers(), TIMEOUT_SLOW_MS, 'Ethereum transfers'),
+    withTimeout(fetchEthTransferCount(), TIMEOUT_SLOW_MS, 'Ethereum transfer total'),
     withTimeout(fetchBaseStandalone(), TIMEOUT_SLOW_MS + 2000, 'Base standalone')
   ]);
 
   const warnings = [];
   const ethHolder = ethHolderResult.status === 'fulfilled' ? ethHolderResult.value : null;
   const ethTransfer = ethTransferResult.status === 'fulfilled' ? ethTransferResult.value : null;
+  const ethTransferCountInfo = ethTransferCountResult.status === 'fulfilled' ? ethTransferCountResult.value : null;
   const base = baseResult.status === 'fulfilled' ? baseResult.value : null;
   if (!ethHolder) warnings.push(`Ethereum holder source unavailable: ${ethHolderResult.reason?.message || 'unknown'}`);
   if (!ethTransfer) warnings.push(`Ethereum transfer source unavailable: ${ethTransferResult.reason?.message || 'unknown'}`);
+  if (!ethTransferCountInfo) warnings.push(`Ethereum transfer total unavailable: ${ethTransferCountResult.reason?.message || 'unknown'}`);
   if (!base) warnings.push(`Base standalone source unavailable: ${baseResult.reason?.message || 'unknown'}`);
   if (base?.warnings?.length) warnings.push(...base.warnings);
 
@@ -450,7 +478,8 @@ export async function buildLivePayload() {
   const ethTransfers = ethTransfer?.rows || [];
   const baseTransfers = base?.transfers || [];
   const baseTransferCount = base?.transferCount ?? null;
-  const ethTransferCount = ethTransfers.length || null; // This is latest loaded ETH rows when full count is unavailable.
+  const ethTransferCountTotal = Number.isFinite(ethTransferCountInfo?.count) ? ethTransferCountInfo.count : null;
+  const ethTransferCount = Number.isFinite(ethTransferCountTotal) ? ethTransferCountTotal : (ethTransfers.length || null); // Falls back to latest loaded ETH rows only when the real total is unavailable.
   const baseCountForTotal = Number.isFinite(baseTransferCount) ? baseTransferCount : (baseTransfers.length || null);
   const allChainTransactions = Number.isFinite(baseCountForTotal) && Number.isFinite(ethTransferCount) ? baseCountForTotal + ethTransferCount : (baseCountForTotal ?? ethTransferCount ?? null);
   const allRows = dedupeTransfers([...baseTransfers, ...ethTransfers]).sort(sortTransfers).slice(0, TABLE_LIMIT);
@@ -475,7 +504,8 @@ export async function buildLivePayload() {
       transfers: ethTransfers,
       transferCount: ethTransferCount,
       transferSource: ethTransfer?.source || null,
-      transferSourceUrl: ethTransfer?.sourceUrl || null
+      transferSourceUrl: ethTransfer?.sourceUrl || null,
+      transferCountSource: ethTransferCountInfo?.source || null
     },
     base: {
       holders: baseHolders,
