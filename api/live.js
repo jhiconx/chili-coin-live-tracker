@@ -259,6 +259,54 @@ async function legacyApi(root, params, timeoutMs = TIMEOUT_FAST_MS) {
   throw new Error(msg);
 }
 
+function scrapeBaseScanTransferRows(html) {
+  const text = String(html || '');
+  const txPattern = /href="\/tx\/(0x[a-f0-9]{64})"/gi;
+  const matches = [...text.matchAll(txPattern)];
+  const rows = [];
+  for (let i = 0; i < matches.length; i++) {
+    const hash = matches[i][1].toLowerCase();
+    const start = matches[i].index;
+    const end = i + 1 < matches.length ? matches[i + 1].index : Math.min(start + 3000, text.length);
+    const chunk = text.slice(start, end);
+
+    const addressMatches = [...chunk.matchAll(/href="\/address\/(0x[a-f0-9]{40})"/gi)].map(m => m[1].toLowerCase());
+    const uniqueAddresses = [...new Set(addressMatches)];
+    if (uniqueAddresses.length < 2) continue;
+    const [from, to] = uniqueAddresses;
+
+    let timestamp = null;
+    const titleMatch = chunk.match(/title="([A-Za-z]{3}-\d{1,2}-\d{4}[^"]*)"/) || chunk.match(/datetime="([^"]+)"/);
+    if (titleMatch) {
+      const cleaned = titleMatch[1].replace(/-/g, ' ').replace(/\s+UTC\s*$/i, ' UTC');
+      const parsed = Date.parse(cleaned);
+      if (!Number.isNaN(parsed)) timestamp = new Date(parsed).toISOString();
+    }
+
+    let amount = null;
+    const amountMatches = [...chunk.matchAll(/>([\d][\d,]*(?:\.\d+)?)</g)].map(m => m[1]);
+    if (amountMatches.length) amount = amountMatches[amountMatches.length - 1].replace(/,/g, '');
+
+    rows.push({
+      hash, from, to,
+      value: amount,
+      tokenDecimal: 0,
+      timeStamp: timestamp ? Math.floor(new Date(timestamp).getTime() / 1000) : null,
+      blockNumber: null,
+      contractAddress: BASE_TOKEN,
+      logIndex: String(i)
+    });
+  }
+  return rows;
+}
+
+async function fetchBaseScanScrapedRows(timeoutMs = TIMEOUT_SLOW_MS) {
+  const html = await fetchText(BASESCAN_TOKEN_URL, timeoutMs);
+  const rows = scrapeBaseScanTransferRows(html);
+  if (!rows.length) throw new Error('BaseScan page scrape found zero transfer rows');
+  return rows;
+}
+
 async function fetchBaseBlockscoutV2(timeoutMs = TIMEOUT_FAST_MS) {
   const data = await fetchJson(`https://base.blockscout.com/api/v2/tokens/${BASE_TOKEN}/transfers`, timeoutMs);
   const items = Array.isArray(data.items) ? data.items : [];
@@ -282,6 +330,7 @@ async function fetchBaseLatestTransfers() {
     sourceName: 'Base CHI ERC-20 transfer feed'
   };
   const attempts = [
+    async () => fetchBaseScanScrapedRows(TIMEOUT_SLOW_MS),
     async () => fetchBaseBlockscoutV2(TIMEOUT_FAST_MS),
     async () => etherscanV2({ chainid: '8453', module: 'account', action: 'tokentx', contractaddress: BASE_TOKEN, page: 1, offset: 100, sort: 'desc' }, TIMEOUT_FAST_MS)
   ];
@@ -387,7 +436,8 @@ export async function buildLivePayload() {
   const baseTransfers = base?.transfers || [];
   const baseTransferCount = base?.transferCount ?? null;
   const ethTransferCount = ethTransfers.length || null; // This is latest loaded ETH rows when full count is unavailable.
-  const allChainTransactions = Number.isFinite(baseTransferCount) && Number.isFinite(ethTransferCount) ? baseTransferCount + ethTransferCount : (baseTransferCount ?? ethTransferCount ?? null);
+  const baseCountForTotal = Number.isFinite(baseTransferCount) ? baseTransferCount : (baseTransfers.length || null);
+  const allChainTransactions = Number.isFinite(baseCountForTotal) && Number.isFinite(ethTransferCount) ? baseCountForTotal + ethTransferCount : (baseCountForTotal ?? ethTransferCount ?? null);
   const allRows = dedupeTransfers([...baseTransfers, ...ethTransfers]).sort(sortTransfers).slice(0, TABLE_LIMIT);
 
   let payload = {
@@ -428,8 +478,8 @@ export async function buildLivePayload() {
     totals: {
       chainHolderTotal: chainTotal,
       allChainTransactions,
-      allChainTransactionsSource: Number.isFinite(baseTransferCount) ? 'BaseScan visible transfer count + loaded Ethereum transfer rows' : 'Loaded transfer rows only',
-      baseContributedToTxn: Number.isFinite(baseTransferCount)
+      allChainTransactionsSource: Number.isFinite(baseTransferCount) ? 'BaseScan visible transfer count + loaded Ethereum transfer rows' : (Number.isFinite(baseCountForTotal) ? 'Loaded Base + Ethereum transfer rows' : 'Loaded transfer rows only'),
+      baseContributedToTxn: Number.isFinite(baseCountForTotal)
     },
     transactions: {
       totalCount: allChainTransactions,
