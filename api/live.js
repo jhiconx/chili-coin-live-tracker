@@ -261,7 +261,7 @@ async function legacyApi(root, params, timeoutMs = TIMEOUT_FAST_MS) {
 
 function scrapeBaseScanTransferRows(html) {
   const text = String(html || '');
-  const txPattern = /href="\/tx\/(0x[a-f0-9]{64})"/gi;
+  const txPattern = /\/tx\/(0x[a-f0-9]{64})/gi;
   const matches = [...text.matchAll(txPattern)];
   const rows = [];
   for (let i = 0; i < matches.length; i++) {
@@ -270,13 +270,15 @@ function scrapeBaseScanTransferRows(html) {
     const end = i + 1 < matches.length ? matches[i + 1].index : Math.min(start + 3000, text.length);
     const chunk = text.slice(start, end);
 
-    const addressMatches = [...chunk.matchAll(/href="\/address\/(0x[a-f0-9]{40})"/gi)].map(m => m[1].toLowerCase());
+    const addressMatches = [...chunk.matchAll(/\/address\/(0x[a-f0-9]{40})/gi)].map(m => m[1].toLowerCase());
     const uniqueAddresses = [...new Set(addressMatches)];
     if (uniqueAddresses.length < 2) continue;
     const [from, to] = uniqueAddresses;
 
     let timestamp = null;
-    const titleMatch = chunk.match(/title="([A-Za-z]{3}-\d{1,2}-\d{4}[^"]*)"/) || chunk.match(/datetime="([^"]+)"/);
+    const titleMatch = chunk.match(/title="([A-Za-z]{3}-\d{1,2}-\d{4}[^"]*)"/)
+      || chunk.match(/datetime="([^"]+)"/)
+      || chunk.match(/\b([A-Za-z]{3}-\d{1,2}-\d{4} \d{1,2}:\d{2}:\d{2} [AP]M)\b/);
     if (titleMatch) {
       const cleaned = titleMatch[1].replace(/-/g, ' ').replace(/\s+UTC\s*$/i, ' UTC');
       const parsed = Date.parse(cleaned);
@@ -284,8 +286,9 @@ function scrapeBaseScanTransferRows(html) {
     }
 
     let amount = null;
-    const amountMatches = [...chunk.matchAll(/>([\d][\d,]*(?:\.\d+)?)</g)].map(m => m[1]);
-    if (amountMatches.length) amount = amountMatches[amountMatches.length - 1].replace(/,/g, '');
+    const amountMatches = [...chunk.matchAll(/(?:^|[\s>])([\d][\d,]*(?:\.\d+)?)(?:[\s<]|$)/g)].map(m => m[1]);
+    const plausible = amountMatches.filter(a => a.replace(/,/g, '').length <= 15);
+    if (plausible.length) amount = plausible[plausible.length - 1].replace(/,/g, '');
 
     rows.push({
       hash, from, to,
@@ -301,10 +304,22 @@ function scrapeBaseScanTransferRows(html) {
 }
 
 async function fetchBaseScanScrapedRows(timeoutMs = TIMEOUT_SLOW_MS) {
-  const html = await fetchText(BASESCAN_TOKEN_URL, timeoutMs);
-  const rows = scrapeBaseScanTransferRows(html);
-  if (!rows.length) throw new Error('BaseScan page scrape found zero transfer rows');
-  return rows;
+  const attempts = [
+    { name: 'BaseScan page scrape', url: BASESCAN_TOKEN_URL },
+    { name: 'BaseScan page scrape via text mirror', url: `https://r.jina.ai/${BASESCAN_TOKEN_URL}` }
+  ];
+  const errors = [];
+  for (const attempt of attempts) {
+    try {
+      const html = await fetchText(attempt.url, timeoutMs);
+      const rows = scrapeBaseScanTransferRows(html);
+      if (rows.length) return rows;
+      errors.push(`${attempt.name}: zero transfer rows found`);
+    } catch (error) {
+      errors.push(`${attempt.name}: ${error.message}`);
+    }
+  }
+  throw new Error(errors.join(' | '));
 }
 
 async function fetchBaseBlockscoutV2(timeoutMs = TIMEOUT_FAST_MS) {
