@@ -277,7 +277,7 @@ button { color: inherit; }
 }
 .hero-mascot img { position: relative; z-index: 2; width: min(440px, 115%); max-height: 355px; object-fit: contain; transform: translate(20px, 18px); filter: drop-shadow(0 22px 26px rgba(0,0,0,.35)); }
 
-.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; margin-top: 16px; }
+.metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; margin-top: 16px; }
 .metric-card {
   min-height: 142px;
   display: flex;
