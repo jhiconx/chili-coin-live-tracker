@@ -199,7 +199,7 @@ async function refresh(force = false) {
     saveLastGood(data);
     render();
     const warningCount = data.warnings?.length || 0;
-    if (warningCount) console.warn('[Chili Coin Tracker] Data source warnings:', data.warnings);
+    if (warningCount) console.warn('[Chili Coin Tracker] Data source warnings:\n' + JSON.stringify(data.warnings, null, 2));
     setStatus(warningCount ? 'warning' : 'live', warningCount ? `Live with ${warningCount} source warning${warningCount === 1 ? '' : 's'}` : 'Live');
     if (force) showFeedback('✓ Updated');
   } catch (error) {
