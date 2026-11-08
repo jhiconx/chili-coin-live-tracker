@@ -1,3 +1,5 @@
+import { fetchVerifiedBaseTransferRows } from '../lib/verified-base.js';
+
 const ETH_TOKEN = '0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA';
 const BASE_TOKEN = '0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -369,19 +371,21 @@ async function fetchBaseLatestTransfers() {
     txExplorer: 'https://basescan.org/tx', addressExplorer: 'https://basescan.org/address',
     sourceName: 'Base CHI ERC-20 transfer feed'
   };
+  // Only use real ERC-20 Transfer logs or trusted indexed events.
+  // Parsing explorer HTML produced incorrect "CHI" amounts and unrelated hashes.
   const attempts = [
-    async () => fetchBaseScanScrapedRows(TIMEOUT_SLOW_MS),
-    async () => fetchBaseBlockscoutV2(TIMEOUT_FAST_MS),
-    async () => etherscanV2({ chainid: '8453', module: 'account', action: 'tokentx', contractaddress: BASE_TOKEN, page: 1, offset: 100, sort: 'desc' }, TIMEOUT_FAST_MS)
+    { source: 'Base RPC verified CHI Transfer logs', run: fetchVerifiedBaseTransferRows },
+    { source: 'Base Blockscout indexed CHI transfers', run: () => fetchBaseBlockscoutV2(TIMEOUT_FAST_MS) },
+    { source: 'Etherscan V2 indexed Base CHI transfers', run: () => etherscanV2({ chainid: '8453', module: 'account', action: 'tokentx', contractaddress: BASE_TOKEN, page: 1, offset: 100, sort: 'desc' }, TIMEOUT_FAST_MS) }
   ];
   const errors = [];
   for (const attempt of attempts) {
     try {
-      const rawRows = await attempt();
+      const rawRows = await attempt.run();
       const rows = dedupeTransfers(rawRows.map(row => normalizeTokenTx(row, chain))).sort(sortTransfers);
-      if (rows.length) return { rows, source: rows[0].sourceName, sourceUrl: BASESCAN_TX_URL };
-      errors.push('attempt returned zero rows');
-    } catch (error) { errors.push(error.message); }
+      if (rows.length) return { rows, source: attempt.source, sourceUrl: BASESCAN_TX_URL };
+      errors.push(attempt.source + ': zero transfers');
+    } catch (error) { errors.push(attempt.source + ': ' + error.message); }
   }
   throw new Error(errors.join(' | '));
 }

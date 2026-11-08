@@ -171,6 +171,67 @@
         </article>
       </section>
 
+      <section id="activity" class="activity-panel" aria-labelledby="activityTitle">
+        <div class="activity-header">
+          <div>
+            <div class="eyebrow"><span class="live-dot"></span>PUBLIC BLOCKCHAIN DATA</div>
+            <h2 id="activityTitle">Live CHI Transactions</h2>
+            <p>Recent ERC-20 Chili transfers on Base and Ethereum. Each row links to its blockchain transaction. Base records come from actual CHI Transfer events, not inferred website text.</p>
+          </div>
+          <button class="refresh-button" id="activityRefreshButton" type="button">Refresh TXN Flow</button>
+        </div>
+
+        <div class="radio-proof">
+          <div class="radio-proof-copy">
+            <span class="proof-eyebrow">StudioTexter • Verified example • November 8, 2026</span>
+            <h3>10 CHI rewarded. 5 CHI redeemed.</h3>
+            <p>These two completed Base transactions show one of the actual radio listener test activations. They are pinned examples, not a simulated live stream.</p>
+          </div>
+          <div class="radio-proof-links">
+            <a href="https://basescan.org/tx/0x6abcd7181c6cb4dba30995ee0b11c31d73d624124d2dc31249d660d5bff30ca4" target="_blank" rel="noopener noreferrer"><span>+10 CHI</span> Shopper reward <small>View BaseScan ↗</small></a>
+            <a href="https://basescan.org/tx/0x78fe523dc17304c9050ba6c2fc52edb2d3e177096b1d3659feabe0097c69ae81" target="_blank" rel="noopener noreferrer"><span>−5 CHI</span> Station redemption <small>View BaseScan ↗</small></a>
+          </div>
+        </div>
+
+        <div class="activity-controls">
+          <label for="walletFocusInput">
+            <span>Filter by public wallet address</span>
+            <input type="text" id="walletFocusInput" placeholder="0x... (optional)" spellcheck="false" autocomplete="off" aria-label="Filter CHI transfers by wallet address" />
+          </label>
+          <label for="directionFilter">
+            <span>Wallet direction</span>
+            <select id="directionFilter">
+              <option value="all">All transfers</option>
+              <option value="in">Received by wallet</option>
+              <option value="out">Sent from wallet</option>
+            </select>
+          </label>
+          <button id="clearWalletFilter" type="button">Clear filters</button>
+        </div>
+        <div class="activity-summary">
+          <span id="activityStatus" role="status" aria-live="polite">Loading verified CHI transfer events…</span>
+          <span id="activityUpdated">Not updated yet</span>
+        </div>
+        <div class="table-shell" role="region" aria-label="Live Chili token transfers" tabindex="0">
+          <table>
+            <thead>
+              <tr><th scope="col">When</th><th scope="col">Network</th><th scope="col">Activity</th><th scope="col">From</th><th scope="col">To</th><th scope="col">CHI Amount</th><th scope="col">TX Hash</th></tr>
+            </thead>
+            <tbody id="activityRows">
+              <tr><td colspan="7" class="empty-state"><span class="spinner"></span>Reading blockchain transfers…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="transferSource">Connecting to on-chain transfer sources…</span>
+          <div class="explorer-links">
+            <a href="https://basescan.org/token/0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8#tokentxns" target="_blank" rel="noopener noreferrer">All Base CHI Transfers ↗</a>
+            <a href="https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA#tokentxns" target="_blank" rel="noopener noreferrer">Ethereum CHI ↗</a>
+          </div>
+        </div>
+        <p class="activity-caveat">Read-only public transactions. The latest rows are not the complete historical ledger and may lag chain confirmation; the two featured radio transfers are verified historical examples. Addresses alone do not identify a specific person or prove legal custody.</p>
+      </section>
+
       <section id="disclosure" class="notice-panel">
         <div class="notice-icon">✓</div>
         <div>

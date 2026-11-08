@@ -1,7 +1,8 @@
 const API_URL = '/api/live';
 const BASE_API_URL = '/api/base';
 const REFRESH_MS = 20_000;
-const LAST_GOOD_KEY = 'chiliTrackerLastGoodV23';
+// New cache key excludes rows inferred by the earlier unreliable HTML scraper.
+const LAST_GOOD_KEY = 'chiliTrackerVerifiedV24';
 
 const state = {
   data: null,
@@ -271,11 +272,11 @@ function renderRows(data) {
   rows = rows.slice(0, 300);
 
   const baseLoaded = Number(data.transactions?.baseLoadedRows || data.base?.transfers?.length || 0);
-  const totalCount = data.transactions?.totalCount ?? data.totals?.allChainTransactions;
   if (elements.activityStatus) {
     elements.activityStatus.textContent = rows.length
-      ? `Showing ${rows.length.toLocaleString()} latest rows${Number.isFinite(Number(totalCount)) ? ` of ${formatNumber(totalCount)} indexed CHI transactions` : ''}. Base rows loaded: ${baseLoaded.toLocaleString()}.`
-      : 'No CHI transaction records were returned by the live sources.';
+      ? `Showing ${rows.length.toLocaleString()} recent on-chain transfers. Base CHI events loaded: ${baseLoaded.toLocaleString()}.`
+      : (focus ? 'No matching transfers in the latest loaded history.' :
+        'No verified CHI transaction events are currently available.');
   }
 
   if (!rows.length) {
@@ -284,13 +285,23 @@ function renderRows(data) {
   }
 
   elements.activityRows.innerHTML = rows.map(row => {
-    const chainClass = row.chainKey === 'base' ? 'base-chip' : 'eth-chip';
-    const flowClass = row.event === 'Mint' ? 'in-chip' : row.event === 'Burn' ? 'out-chip' : 'transfer-chip';
+    const chainClass = row.chainKey === 'base' ? 'base' : 'ethereum';
+    const isStationRedemption = row.chainKey === 'base' &&
+      row.to?.toLowerCase() === '0x2009852f2d499aa419e452adcd7ad91d01effadb' &&
+      String(row.amount) === '5';
+    const isChiReward = row.chainKey === 'base' &&
+      row.from?.toLowerCase() === '0xe9fbb243f3fb7400732fac4e564bbbabc753ddf4' &&
+      ['1', '10'].includes(String(row.amount));
+    const activityName = isStationRedemption ? 'Station redemption' :
+      isChiReward ? 'CHI reward' : (row.event || 'Transfer');
+    const flowClass = isStationRedemption ? 'radio' :
+      isChiReward ? 'reward' : (row.event === 'Mint' ? 'mint' :
+      row.event === 'Burn' ? 'burn' : 'transfer');
     return `
       <tr>
         <td>${relativeTime(row.timestamp)}</td>
-        <td><span class="chain-chip ${chainClass}">${escapeHtml(row.chain || row.chainKey || '—')}</span></td>
-        <td><span class="flow-chip ${flowClass}">${escapeHtml(row.event || 'Transfer')}</span></td>
+        <td><span class="chain-pill ${chainClass}">${escapeHtml(row.chain || row.chainKey || '—')}</span></td>
+        <td><span class="flow-tag ${flowClass}">${escapeHtml(activityName)}</span></td>
         <td><a href="${escapeAttr(row.fromUrl || '#')}" target="_blank" rel="noopener noreferrer">${escapeHtml(shortAddress(row.from))}</a></td>
         <td><a href="${escapeAttr(row.toUrl || '#')}" target="_blank" rel="noopener noreferrer">${escapeHtml(shortAddress(row.to))}</a></td>
         <td>${escapeHtml(formatAmount(row.amount))}</td>
