@@ -45,3 +45,9 @@ test('public tracker restores transaction table, and never relies on scraped Bas
   assert.match(api, /fetchVerifiedBaseTransferRows/);
   assert.doesNotMatch(api, /async \(\) => fetchBaseScanScrapedRows/);
 });
+
+test('public RPC reader allows for head lag between load-balanced nodes', () => {
+  const source = readFileSync(new URL('../lib/verified-base.js', import.meta.url), 'utf8');
+  assert.match(source, /reportedHead - 16/);
+  assert.match(source, /eth_getLogs/);
+});
