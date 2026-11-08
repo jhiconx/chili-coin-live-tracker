@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { normalizeTransferLog } from '../api/verified-base.js';
+import { normalizeTransferLog } from '../lib/verified-base.js';
 
 const contract = '0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8';
 const topic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';

@@ -1,4 +1,4 @@
-import { fetchVerifiedBaseTransferRows } from './verified-base.js';
+import { fetchVerifiedBaseTransferRows } from '../lib/verified-base.js';
 
 const ETH_TOKEN = '0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA';
 const BASE_TOKEN = '0x25Ec4c3eF2A21d178922Fb02c7F92111852165E8';
