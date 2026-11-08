@@ -222,6 +222,12 @@
             </tbody>
           </table>
         </div>
+        <div class="transaction-pagination" aria-label="Browse CHI transaction pages">
+          <button id="transactionPrevious" type="button" disabled aria-label="Show previous 20 transactions">← Previous 20</button>
+          <span id="transactionPageStatus" role="status" aria-live="polite">Page 1 of 1 · 20 transactions per page</span>
+          <button id="transactionNext" type="button" disabled aria-label="Show next 20 transactions">Next 20 →</button>
+        </div>
+        <p class="pagination-note">Browse 20 transactions at a time. Previous and Next stop at the ends of the loaded history. Automatic refresh pauses while you view older pages.</p>
         <div class="table-footer">
           <span id="transferSource">Connecting to on-chain transfer sources…</span>
           <div class="explorer-links">

@@ -695,3 +695,52 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
   .activity-panel .table-shell { max-width: 100%; }
   .activity-panel table { min-width: 870px; }
 }
+
+/* Finite transaction pagination: exactly 20 rows per page */
+.transaction-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 18px 0 8px;
+}
+.transaction-pagination button {
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 165, 53, .46);
+  border-radius: 12px;
+  background: rgba(255, 133, 20, .10);
+  color: #ffe5c4;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.transaction-pagination button:hover:not(:disabled),
+.transaction-pagination button:focus-visible {
+  border-color: #ffbf63;
+  background: rgba(255, 154, 28, .22);
+}
+.transaction-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: .36;
+}
+#transactionPageStatus {
+  color: #f5d9b5;
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.pagination-note {
+  margin: 0 0 14px;
+  color: #a88979;
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  .transaction-pagination { gap: 10px; }
+  .transaction-pagination button { flex: 1 1 130px; }
+  #transactionPageStatus { order: -1; flex-basis: 100%; }
+}

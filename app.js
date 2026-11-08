@@ -1,3 +1,5 @@
+import { paginateTransactions, TRANSACTIONS_PER_PAGE } from './txn-pagination.js';
+
 const API_URL = '/api/live';
 const BASE_API_URL = '/api/base';
 const REFRESH_MS = 20_000;
@@ -10,7 +12,8 @@ const state = {
   loading: false,
   timer: null,
   focusWallet: '',
-  direction: 'all'
+  direction: 'all',
+  transactionPage: 1
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -33,7 +36,10 @@ const elements = {
   transferSource: $('#transferSource'),
   walletFocusInput: $('#walletFocusInput'),
   directionFilter: $('#directionFilter'),
-  clearWalletFilter: $('#clearWalletFilter')
+  clearWalletFilter: $('#clearWalletFilter'),
+  transactionPrevious: $('#transactionPrevious'),
+  transactionNext: $('#transactionNext'),
+  transactionPageStatus: $('#transactionPageStatus')
 };
 
 function loadLastGood() {
@@ -269,22 +275,30 @@ function renderRows(data) {
     if (state.direction === 'in') rows = rows.filter(row => row.to?.toLowerCase() === focus);
     if (state.direction === 'out') rows = rows.filter(row => row.from?.toLowerCase() === focus);
   }
-  rows = rows.slice(0, 300);
+  // Show a finite 20-row page, never the entire loaded history at once.
+  const page = paginateTransactions(rows, state.transactionPage);
+  state.transactionPage = page.page;
+  if (elements.transactionPrevious) elements.transactionPrevious.disabled = !page.hasPrevious;
+  if (elements.transactionNext) elements.transactionNext.disabled = !page.hasNext;
+  if (elements.transactionPageStatus) {
+    elements.transactionPageStatus.textContent =
+      `Page ${page.page} of ${page.totalPages} · ${page.first}–${page.last} of ${page.total} loaded · ${TRANSACTIONS_PER_PAGE} per page`;
+  }
 
   const baseLoaded = Number(data.transactions?.baseLoadedRows || data.base?.transfers?.length || 0);
   if (elements.activityStatus) {
-    elements.activityStatus.textContent = rows.length
-      ? `Showing ${rows.length.toLocaleString()} recent on-chain transfers. Base CHI events loaded: ${baseLoaded.toLocaleString()}.`
+    elements.activityStatus.textContent = page.total
+      ? `Showing ${page.first}–${page.last} of ${page.total} loaded transfers. Base CHI events loaded: ${baseLoaded.toLocaleString()}.`
       : (focus ? 'No matching transfers in the latest loaded history.' :
         'No verified CHI transaction events are currently available.');
   }
 
-  if (!rows.length) {
+  if (!page.total) {
     elements.activityRows.innerHTML = '<tr><td colspan="7" class="empty-state">No ETH or Base CHI transfers were returned. Click Refresh TXN or open the explorer links.</td></tr>';
     return;
   }
 
-  elements.activityRows.innerHTML = rows.map(row => {
+  elements.activityRows.innerHTML = page.rows.map(row => {
     const chainClass = row.chainKey === 'base' ? 'base' : 'ethereum';
     const isStationRedemption = row.chainKey === 'base' &&
       row.to?.toLowerCase() === '0x2009852f2d499aa419e452adcd7ad91d01effadb' &&
@@ -331,17 +345,30 @@ function setupEvents() {
   elements.activityRefresh?.addEventListener('click', () => refresh(true));
   elements.walletFocusInput?.addEventListener('input', event => {
     state.focusWallet = event.target.value;
+    state.transactionPage = 1;
     renderRows(bestData() || {});
   });
   elements.directionFilter?.addEventListener('change', event => {
     state.direction = event.target.value;
+    state.transactionPage = 1;
     renderRows(bestData() || {});
   });
   elements.clearWalletFilter?.addEventListener('click', () => {
     state.focusWallet = '';
     state.direction = 'all';
+    state.transactionPage = 1;
     if (elements.walletFocusInput) elements.walletFocusInput.value = '';
     if (elements.directionFilter) elements.directionFilter.value = 'all';
+    renderRows(bestData() || {});
+  });
+  elements.transactionPrevious?.addEventListener('click', () => {
+    if (elements.transactionPrevious.disabled || state.transactionPage <= 1) return;
+    state.transactionPage -= 1;
+    renderRows(bestData() || {});
+  });
+  elements.transactionNext?.addEventListener('click', () => {
+    if (elements.transactionNext.disabled) return;
+    state.transactionPage += 1;
     renderRows(bestData() || {});
   });
 }
@@ -353,4 +380,9 @@ if (state.lastGood) {
   setStatus('warning', 'Showing last good data');
 }
 refresh(false);
-state.timer = setInterval(() => refresh(false), REFRESH_MS);
+// Keep page 1 live. Freeze older pages so rows do not shift while browsing;
+// resume automatic refresh when the visitor goes back to page 1.
+state.timer = setInterval(() => {
+  if (state.transactionPage !== 1 || document.visibilityState === 'hidden') return;
+  refresh(false);
+}, REFRESH_MS);
