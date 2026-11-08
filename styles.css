@@ -637,3 +637,61 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
   .ticker-item { height: 150px; border-radius: 10px; }
   .ticker-track { gap: 18px; animation-duration: 58s; }
 }
+
+
+/* Chili Coin Live Tracker — verified on-chain activity and radio proof */
+.radio-proof {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 1fr);
+  gap: 20px;
+  align-items: center;
+  padding: 19px 20px;
+  margin-bottom: 19px;
+  border-radius: 17px;
+  border: 1px solid rgba(255, 184, 55, .34);
+  background: linear-gradient(125deg, rgba(126, 30, 7, .35), rgba(26, 8, 6, .75));
+}
+.radio-proof-copy h3 { font-size: 21px; margin: 6px 0 6px; color: #ffcb6a; }
+.radio-proof-copy p { margin: 0; color: #c1a89c; font-size: 12px; line-height: 1.55; }
+.proof-eyebrow {
+  color: #eab47e;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.radio-proof-links { display: grid; gap: 9px; }
+.radio-proof-links a {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 12px;
+  color: #f5e1d4;
+  font-size: 12px;
+  font-weight: 760;
+  background: rgba(255, 255, 255, .045);
+  text-decoration: none;
+}
+.radio-proof-links a:hover { border-color: #ffb34c; background: rgba(255, 155, 23, .09); }
+.radio-proof-links a span { color: #ffc453; font-size: 15px; font-weight: 950; min-width: 74px; }
+.radio-proof-links a small { margin-left: auto; color: #e7b990; font-size: 10px; white-space: nowrap; }
+.flow-tag.station,
+.flow-tag.radio { color: #ffdb86; background: rgba(255, 169, 25, .16); }
+.flow-tag.reward { color: #82eaa7; background: rgba(48, 214, 95, .13); }
+.activity-panel { scroll-margin-top: 90px; }
+.activity-panel .table-shell a { color: #f9d3ac; text-decoration: none; }
+.activity-panel .table-shell a:hover { color: #ffe9c2; text-decoration: underline; }
+.activity-panel .table-shell tbody tr td:nth-child(6) { font-variant-numeric: tabular-nums; font-weight: 860; color: #fff0d1; }
+@media (max-width: 940px) {
+  .radio-proof { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .radio-proof { padding: 15px; }
+  .radio-proof-copy h3 { font-size: 19px; }
+  .radio-proof-links a { flex-wrap: wrap; }
+  .radio-proof-links a small { margin-left: 0; }
+  .activity-panel .table-shell { max-width: 100%; }
+  .activity-panel table { min-width: 870px; }
+}
