@@ -22,6 +22,8 @@ const elements = {
   lastUpdated: $('#lastUpdated'),
   ethHolders: $('#ethHolders'),
   baseHolders: $('#baseHolders'),
+  baseTxnTotal: $('#baseTxnTotal'),
+  baseTxnSource: $('#baseTxnSource'),
   chainTotal: $('#chainTotal'),
   allChainTransactions: $('#allChainTransactions'),
   txnSource: $('#txnSource'),
@@ -248,6 +250,17 @@ function render() {
 
   elements.ethHolders && (elements.ethHolders.textContent = formatNumber(ethHolders));
   elements.baseHolders && (elements.baseHolders.textContent = formatNumber(baseHolders));
+  const baseTxCount = data.base?.transferCount;
+  const hasBaseTxCount = baseTxCount !== null && baseTxCount !== undefined && baseTxCount !== '' &&
+    Number.isFinite(Number(baseTxCount)) && Number(baseTxCount) >= 0;
+  if (elements.baseTxnTotal) {
+    elements.baseTxnTotal.textContent = hasBaseTxCount ? formatNumber(baseTxCount) : '—';
+  }
+  if (elements.baseTxnSource) {
+    elements.baseTxnSource.textContent = hasBaseTxCount
+      ? (data.base?.transferCountSource || 'BaseScan reported') + ' · token transfers'
+      : 'Total count unavailable · showing recent rows only';
+  }
   elements.chainTotal && (elements.chainTotal.textContent = formatNumber(chainTotal));
   elements.allChainTransactions && (elements.allChainTransactions.textContent = formatNumber(txnTotal));
   elements.ethHolderSource && (elements.ethHolderSource.textContent = data.ethereum?.holderSource || 'Ethereum source unavailable');
@@ -300,17 +313,10 @@ function renderRows(data) {
 
   elements.activityRows.innerHTML = page.rows.map(row => {
     const chainClass = row.chainKey === 'base' ? 'base' : 'ethereum';
-    const isStationRedemption = row.chainKey === 'base' &&
-      row.to?.toLowerCase() === '0x2009852f2d499aa419e452adcd7ad91d01effadb' &&
-      String(row.amount) === '5';
-    const isChiReward = row.chainKey === 'base' &&
-      row.from?.toLowerCase() === '0xe9fbb243f3fb7400732fac4e564bbbabc753ddf4' &&
-      ['1', '10'].includes(String(row.amount));
-    const activityName = isStationRedemption ? 'Station redemption' :
-      isChiReward ? 'CHI reward' : (row.event || 'Transfer');
-    const flowClass = isStationRedemption ? 'radio' :
-      isChiReward ? 'reward' : (row.event === 'Mint' ? 'mint' :
-      row.event === 'Burn' ? 'burn' : 'transfer');
+    // Generic public labels; do not showcase individual partner campaigns.
+    const activityName = row.event || 'Transfer';
+    const flowClass = row.event === 'Mint' ? 'mint' :
+      row.event === 'Burn' ? 'burn' : 'transfer';
     return `
       <tr>
         <td>${relativeTime(row.timestamp)}</td>
@@ -327,6 +333,8 @@ function renderRows(data) {
 function renderEmpty(message) {
   elements.ethHolders && (elements.ethHolders.textContent = '—');
   elements.baseHolders && (elements.baseHolders.textContent = '—');
+  elements.baseTxnTotal && (elements.baseTxnTotal.textContent = '—');
+  elements.baseTxnSource && (elements.baseTxnSource.textContent = 'Total count unavailable');
   elements.chainTotal && (elements.chainTotal.textContent = '—');
   elements.allChainTransactions && (elements.allChainTransactions.textContent = '—');
   elements.activityStatus && (elements.activityStatus.textContent = message || 'No live data.');

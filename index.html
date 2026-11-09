@@ -129,6 +129,14 @@
             <span class="metric-sub"><i class="status-bullet red"></i>Not deduplicated across chains</span>
           </div>
         </article>
+        <article class="metric-card base-txn-card">
+          <div class="metric-icon tx-count-icon" aria-hidden="true">↕</div>
+          <div>
+            <span class="metric-label">Total Base CHI Transactions</span>
+            <strong id="baseTxnTotal" class="metric-number">—</strong>
+            <span class="metric-sub"><i class="status-bullet amber"></i><span id="baseTxnSource">Reading BaseScan token transfer count…</span></span>
+          </div>
+        </article>
       </section>
 
       <section id="contracts" class="chain-grid">
@@ -181,18 +189,6 @@
           <button class="refresh-button" id="activityRefreshButton" type="button">Refresh TXN Flow</button>
         </div>
 
-        <div class="radio-proof">
-          <div class="radio-proof-copy">
-            <span class="proof-eyebrow">StudioTexter • Verified example • November 8, 2026</span>
-            <h3>10 CHI rewarded. 5 CHI redeemed.</h3>
-            <p>These two completed Base transactions show one of the actual radio listener test activations. They are pinned examples, not a simulated live stream.</p>
-          </div>
-          <div class="radio-proof-links">
-            <a href="https://basescan.org/tx/0x6abcd7181c6cb4dba30995ee0b11c31d73d624124d2dc31249d660d5bff30ca4" target="_blank" rel="noopener noreferrer"><span>+10 CHI</span> Shopper reward <small>View BaseScan ↗</small></a>
-            <a href="https://basescan.org/tx/0x78fe523dc17304c9050ba6c2fc52edb2d3e177096b1d3659feabe0097c69ae81" target="_blank" rel="noopener noreferrer"><span>−5 CHI</span> Station redemption <small>View BaseScan ↗</small></a>
-          </div>
-        </div>
-
         <div class="activity-controls">
           <label for="walletFocusInput">
             <span>Filter by public wallet address</span>
@@ -235,7 +231,7 @@
             <a href="https://etherscan.io/token/0x83E8fb8D8176224FCC828EdC73E152EC1818a2dA#tokentxns" target="_blank" rel="noopener noreferrer">Ethereum CHI ↗</a>
           </div>
         </div>
-        <p class="activity-caveat">Read-only public transactions. The latest rows are not the complete historical ledger and may lag chain confirmation; the two featured radio transfers are verified historical examples. Addresses alone do not identify a specific person or prove legal custody.</p>
+        <p class="activity-caveat">Read-only public CHI transactions. The Base CHI total reflects the token-transfer count reported by BaseScan, not all transactions on the Base network. The recent rows are not the complete historical ledger and may lag chain confirmation. Addresses alone do not identify a person or prove legal custody.</p>
       </section>
 
       <section id="disclosure" class="notice-panel">
