@@ -159,7 +159,7 @@
 <div class="result orange"><span>CHI TOKENS / DAY</span><strong id="r-daily">—</strong><small>Repeat reward distribution, not new wallets</small></div>
 <div class="result"><span>CHI TOKENS / MONTH</span><strong id="r-monthly">—</strong><small>Average monthly token distributions</small></div>
 <div class="result"><span>CHI TOKENS / YEAR</span><strong id="r-annually">—</strong><small>CHI reward TXNs × CHI per reward</small></div>
-<div class="result blue"><span>CRO TOKENS / YEAR</span><strong id="r-cro">—</strong><small>Recurring CRO + proposed exchange welcome bonuses</small></div>
+<div class="result blue"><span>CRO REWARD TOKENS / YEAR</span><strong id="r-cro">—</strong><small>CRO reward TXNs × CRO per reward (excludes one-time welcome bonuses)</small></div><div class="result"><span>ONE-TIME CRO WELCOME BONUSES / YEAR</span><strong id="r-cro-bonus">—</strong><small>Optional Crypto.com signups × CRO welcome bonus</small></div><div class="result blue"><span>TOTAL CRO TOKENS / YEAR</span><strong id="r-cro-total">—</strong><small>Recurring CRO rewards + one-time welcome bonuses</small></div>
 <div class="model-section-split"><span>03 / UNIQUE WALLETS & ECONOMICS</span><h3>ACQUIRE ONCE. RETAIN THROUGH TXNs.</h3><p>Wallet acquisition is one time per first qualifying recipient. Repeat shopping generates reward activity, not repeat acquisitions.</p></div>
 <div class="result green"><span>NEW CHI WALLETS · BASE</span><strong id="r-chi-wallets">—</strong><small>One per first eligible CHI recipient</small></div>
 <div class="result blue"><span>NEW CRO WALLETS · BASE</span><strong id="r-cro-wallets">—</strong><small>Paired one-to-one with CHI wallets in the proposed model</small></div>
@@ -230,9 +230,11 @@ function compute(){
  const croWelcomeTxns=inputs.croWelcome>0?cryptoSignups:0;
  const totalTokenTxns=groceryTxns+croRewardTxns+croWelcomeTxns;
  const annual=groceryTxns*inputs.chiPerReward;
- const cro=croRewardTxns*inputs.croPerReward+cryptoSignups*inputs.croWelcome;
+ const croRewardTokens=croRewardTxns*inputs.croPerReward;
+ const croBonusTokens=cryptoSignups*inputs.croWelcome;
+ const cro=croRewardTokens+croBonusTokens;
  const revenue=payableWallets*inputs.walletFee;
- return{usPop:US_POP,tamCap,uniqueBase,potentialUsers,visitsMonth,visitsYear,participatingVisitsYear,eligibleTxns,groceryTxns,walletOwners,chiWallets,croWallets,totalWallets,cryptoSignups,payableWallets,croRewardTxns,croWelcomeTxns,totalTokenTxns,annual,cro,revenue}
+ return{usPop:US_POP,tamCap,uniqueBase,potentialUsers,visitsMonth,visitsYear,participatingVisitsYear,eligibleTxns,groceryTxns,walletOwners,chiWallets,croWallets,totalWallets,cryptoSignups,payableWallets,croRewardTxns,croWelcomeTxns,totalTokenTxns,annual,cro,croRewardTokens,croBonusTokens,revenue}
 }
 let computed;function set(id,v){const el=document.getElementById(id);if(el)el.textContent=v}
 function render(){
@@ -240,7 +242,7 @@ function render(){
  set('r-grocery',short(a.uniqueBase));set('hero-daily-shoppers',short(a.uniqueBase));set('r-participants',short(a.potentialUsers));
  set('r-visits-month',short(a.visitsMonth));set('r-visits-year',short(a.visitsYear));set('r-participating-visits',short(a.participatingVisitsYear));set('r-eligible-txns',short(a.eligibleTxns));
  set('r-chi-txns-year',short(a.groceryTxns));set('r-cro-txns-year',short(a.croRewardTxns));set('r-token-txns-year',short(a.totalTokenTxns));set('r-chi-txns-day',short(a.groceryTxns/365));
- set('r-daily',short(a.annual/365));set('r-monthly',short(a.annual/12));set('r-annually',short(a.annual));set('r-cro',short(a.cro));
+ set('r-daily',short(a.annual/365));set('r-monthly',short(a.annual/12));set('r-annually',short(a.annual));set('r-cro',short(a.croRewardTokens));set('r-cro-bonus',short(a.croBonusTokens));set('r-cro-total',short(a.cro));
  set('r-chi-wallets',short(a.chiWallets));set('r-cro-wallets',short(a.croWallets));set('r-total-wallets',short(a.totalWallets));set('r-wallet-pairs-daily',short(a.walletOwners/365));set('r-wallet-pairs-monthly',short(a.walletOwners/12));
  set('r-crypto-signups',short(a.cryptoSignups));set('r-payable-wallets',short(a.payableWallets));set('r-revenue',cash(a.revenue));
  set('g-txns',short(a.groceryTxns));set('g-d',short(a.annual/365));set('g-m',short(a.annual/12));set('g-y',short(a.annual));
@@ -256,7 +258,7 @@ document.getElementById('export').addEventListener('click',()=>{
 ['Total unique grocery shopper TAM',a.uniqueBase],['Potential participating shoppers',a.potentialUsers],
  ['Monthly grocery visits (repeat)',a.visitsMonth],['Annual grocery visits (repeat)',a.visitsYear],['Participating annual visits',a.participatingVisitsYear],
  ['Qualifying annual visits',a.eligibleTxns],['Annual CHI reward TXNs',a.groceryTxns],['Annual CRO reward TXNs',a.croRewardTxns],
- ['All modeled token transfers',a.totalTokenTxns],['CHI tokens annually',a.annual],['CRO tokens annually',a.cro],
+ ['All modeled token transfers',a.totalTokenTxns],['CHI tokens annually',a.annual],['Recurring CRO reward tokens annually (excludes welcome bonuses)',a.croRewardTokens],['One-time CRO welcome tokens annually',a.croBonusTokens],['Total CRO tokens annually including welcome bonuses',a.cro],
  ['First-time eligible CHI wallets',a.chiWallets],['First-time eligible CRO wallets',a.croWallets],['Combined wallet records',a.totalWallets],
  ['Optional Crypto.com signups',a.cryptoSignups],['Payout-eligible CRO wallet owners',a.payableWallets],['Illustrative fees USD',a.revenue],
  ['Note','Grocery-only illustrative model; repeat visits do not increase unique shopper TAM'] ];
