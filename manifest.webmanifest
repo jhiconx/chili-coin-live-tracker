@@ -10,7 +10,7 @@
   "theme_color": "#090d18",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/jhiconx/chili-coin-live-tracker/main/assets/favicon.png",
+      "src": "/assets/favicon.png",
       "sizes": "any",
       "type": "image/png",
       "purpose": "any"
