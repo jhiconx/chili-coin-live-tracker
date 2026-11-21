@@ -191,10 +191,10 @@ const spec=[
 {id:'eligibleCheckoutRate',title:'Participating visits qualifying for CHI',min:0,max:100,step:1,value:20,unit:'%'},
 {id:'rewardsPerYear',title:'Maximum rewards per participant / year',min:1,max:365,step:1,value:52,unit:''},
 {id:'chiPerReward',title:'CHI per reward transaction',min:1,max:100,step:1,value:10,unit:' CHI'},
-{id:'croPerReward',title:'CRO per reward transaction',min:0,max:5,step:.05,value:.25,unit:' CRO'},
+{id:'croPerReward',title:'CRO per reward transaction',min:0,max:5,step:1,value:1,unit:' CRO'},
 {id:'cryptoSignupRate',title:'Crypto.com account signup conversion',min:0,max:100,step:1,value:35,unit:'%',group:'Wallet acquisition economics'},
 {id:'payoutEligibleRate',title:'New CRO wallets qualifying for acquisition fee',min:0,max:100,step:1,value:100,unit:'%'},
-{id:'croWelcome',title:'CRO welcome bonus per signup',min:0,max:20,step:.25,value:1,unit:' CRO'},
+{id:'croWelcome',title:'CRO welcome bonus per signup',min:0,max:20,step:1,value:1,unit:' CRO'},
 {id:'walletFee',title:'Proposed fee per eligible new wallet',min:0,max:250,step:5,value:100,unit:' USD'}
 ];
 let inputs={},defaults={};for(const item of spec){inputs[item.id]=item.value;defaults[item.id]=item.value}
@@ -209,7 +209,7 @@ for(const item of spec){
  div.innerHTML='<label class="control-head" for="'+item.id+'"><span>'+item.title+'</span><input aria-label="'+item.title+'" type="number" inputmode="decimal" id="'+item.id+'-num" min="'+item.min+'" max="'+item.max+'" step="'+item.step+'" value="'+item.value+'"/></label><input id="'+item.id+'" type="range" min="'+item.min+'" max="'+item.max+'" step="'+item.step+'" value="'+item.value+'"/><div class="hint" id="'+item.id+'-desc">'+hint+'</div>';
  parent.append(div);
  const range=div.querySelector('input[type=range]'),num=div.querySelector('input[type=number]');
- const update=v=>{const raw=Number(v);if(!Number.isFinite(raw))return;const value=Math.min(item.max,Math.max(item.min,raw));inputs[item.id]=value;range.value=String(value);num.value=String(value);render()};
+ const update=v=>{const raw=Number(v);if(!Number.isFinite(raw))return;const clamped=Math.min(item.max,Math.max(item.min,raw));const value=(item.id==='croPerReward'||item.id==='croWelcome')?Math.round(clamped):clamped;inputs[item.id]=value;range.value=String(value);num.value=String(value);render()};
  range.addEventListener('input',e=>update(e.target.value));num.addEventListener('change',e=>update(e.target.value));
 }
 function compute(){
