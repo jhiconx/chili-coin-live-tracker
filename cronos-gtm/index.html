@@ -144,7 +144,7 @@
 </div>
 <div class="result-cards">
 <div class="model-section-split"><span>01 / UNIQUE SHOPPER TAM</span><h3>REACH PEOPLE ONCE.</h3><p>Unique shopper base = grocery stores × Unique Daily Shoppers per store, with a hard U.S. population cap. No multiplication by visits or days.</p></div>
-<div class="result"><span>U.S. POPULATION · UPPER LIMIT</span><strong id="r-us-pop">—</strong><small>Planning benchmark; not every resident is a grocery shopper</small></div>
+
 <div class="result orange"><span>TOTAL UNIQUE GROCERY SHOPPERS · TAM</span><strong id="r-grocery">—</strong><small>Daily unique shoppers/store × stores, subject to the population ceiling</small></div>
 <div class="result green"><span>POTENTIAL PARTICIPATING SHOPPERS</span><strong id="r-participants">—</strong><small>Unique shopper TAM × reward participation rate</small></div>
 <div class="model-section-split"><span>02 / REPEAT GROCERY VISITS & TXNs</span><h3>THE FREQUENCY ENGINE.</h3><p>Default: the same unique shopper goes grocery shopping 12 times a month. The number of people stays fixed while visits and reward transactions multiply.</p></div>
@@ -239,7 +239,7 @@ function compute(){
 let computed;function set(id,v){const el=document.getElementById(id);if(el)el.textContent=v}
 function render(){
  const a=computed=compute();
- set('r-us-pop',short(a.usPop));set('r-grocery',short(a.uniqueBase));set('hero-daily-shoppers',short(a.uniqueBase));set('r-participants',short(a.potentialUsers));
+ set('r-grocery',short(a.uniqueBase));set('hero-daily-shoppers',short(a.uniqueBase));set('r-participants',short(a.potentialUsers));
  set('r-visits-month',short(a.visitsMonth));set('r-visits-year',short(a.visitsYear));set('r-participating-visits',short(a.participatingVisitsYear));set('r-eligible-txns',short(a.eligibleTxns));
  set('r-chi-txns-year',short(a.groceryTxns));set('r-cro-txns-year',short(a.croRewardTxns));set('r-token-txns-year',short(a.totalTokenTxns));set('r-chi-txns-day',short(a.groceryTxns/365));
  set('r-daily',short(a.annual/365));set('r-monthly',short(a.annual/12));set('r-annually',short(a.annual));set('r-cro',short(a.cro));
