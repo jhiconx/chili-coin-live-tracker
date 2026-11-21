@@ -1,0 +1,19 @@
+{
+  "name": "CHI × Cronos — Everyday Onramp",
+  "short_name": "CHI × Cronos",
+  "description": "An interactive go-to-market pitch and distribution model.",
+  "id": "/",
+  "start_url": "/#pitch",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#080b13",
+  "theme_color": "#090d18",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/jhiconx/chili-coin-live-tracker/main/assets/favicon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
