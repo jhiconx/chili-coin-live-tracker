@@ -133,7 +133,7 @@
 <article class="channel reverse" style="margin-top:25px"><div class="photo-box" style="background-image:url('https://raw.githubusercontent.com/jhiconx/iconx.io/main/assets/campus-can.jpg')"></div><div class="info"><div class="eyebrow">04 · Sampling for Good · Gen Z</div><h2>WIN THE NEXT GENERATION.</h2><p>Recruit campus organizations, fraternities and sororities through Sampling for Good. Ambassadors help chapters select brand samples, stage events, record verified distribution and give to causes. Each engagement creates a potential CHI touchpoint and, with consent, an optional CRO wallet introduction.</p><div class="metric">150 campuses · modeled expansion, not live coverage</div><div class="thumbnail-row"><span>Chapters</span><span>Ambassadors</span><span>Brand sampling</span><span>Cause giving</span><span>Events</span></div></div></article>
 <div class="section-head" style="margin-top:85px"><div class="eyebrow">The measurable customer journey</div><h2>ONE IDENTITY.<br/><span class="gradient">EVERY CHANNEL.</span></h2></div><div class="journey"><div class="step"><span class="n">01 / DISCOVER</span><b>Real-world moment</b><p>Purchase, SMS, sampling or film</p></div><div class="step"><span class="n">02 / VALIDATE</span><b>Verified action</b><p>Eligibility, unique identity and fraud controls</p></div><div class="step"><span class="n">03 / REWARD</span><b>CHI distribution</b><p>Existing token held in a shopper wallet</p></div><div class="step"><span class="n">04 / PAIR</span><b>CRO wallet on Base</b><p>One new CRO wallet paired with each first CHI recipient</p></div><div class="step"><span class="n">05 / REPEAT</span><b>More reasons to return</b><p>Brand campaigns and future rewards</p></div></div><div class="quote">“Instead of acquiring a crypto customer and searching for a use case, start with the use case and earn the right to introduce crypto.”</div><p class="smallprint">This is a proposed operating model. CHI currently exists on Ethereum and Base; native distribution of CHI on Cronos or a CHI/CRO pair would require additional technical, liquidity and compliance work.</p></div></section></section>
 <section class="page" id="model">
-<div class="model-hero"><div class="container"><div class="eyebrow">03 / Grocery-only growth engine</div><h1>UNIQUE SHOPPERS.<br/><span class="gradient">REPEAT REWARDS.</span></h1><p class="lead">One achievable grocery shopper base creates wallet opportunities. Those same shoppers return throughout the year and create recurring CHI and CRO reward transactions. Only unique shoppers are counted toward the TAM, capped by U.S. population.</p></div></div>
+<div class="model-hero"><div class="container"><div class="eyebrow">03 / Grocery-only growth engine</div><h1>UNIQUE SHOPPERS.<br/><span class="gradient">REPEAT REWARDS.</span></h1><p class="lead">One achievable grocery shopper base creates wallet opportunities. Those same shoppers return throughout the year and create recurring CHI and CRO reward transactions. Each shopper is counted once in the model, while repeat visits drive transactions.</p></div></div>
 <div class="container" style="padding-bottom:100px"><div class="dashboard">
 <aside class="controls"><h3>BUILD YOUR GROCERY SCENARIO</h3><p class="tiny" style="margin:0">Adjust the grocery-only assumptions below. Unique people and repeat transactions are measured separately.</p><div id="control-list"></div><button class="reset" id="reset">↺ &nbsp; RESET TO BASE CASE</button></aside>
 <div><div class="model-actions"><span class="pill orange">● Grocery-only scenario · modeled assumptions</span><button class="download" id="export">↓ EXPORT SCENARIO CSV</button></div>
@@ -143,9 +143,9 @@
 <p>The first qualifying reward opens the modeled wallet pair. Returning for more groceries adds reward transactions but does not add another shopper or wallet pair. CRO on Base and exchange integration require technical and commercial implementation.</p>
 </div>
 <div class="result-cards">
-<div class="model-section-split"><span>01 / UNIQUE SHOPPER TAM</span><h3>REACH PEOPLE ONCE.</h3><p>Unique shopper base = grocery stores × Unique Daily Shoppers per store, with a hard U.S. population cap. No multiplication by visits or days.</p></div>
+<div class="model-section-split"><span>01 / UNIQUE SHOPPER TAM</span><h3>REACH PEOPLE ONCE.</h3><p>Unique shopper base = grocery stores × Unique Daily Shoppers per store, without multiplying by visits or days.</p></div>
 
-<div class="result orange"><span>TOTAL UNIQUE GROCERY SHOPPERS · TAM</span><strong id="r-grocery">—</strong><small>Daily unique shoppers/store × stores, subject to the population ceiling</small></div>
+<div class="result orange"><span>TOTAL UNIQUE GROCERY SHOPPERS · TAM</span><strong id="r-grocery">—</strong><small>Daily unique shoppers/store × stores; one modeled shopper base</small></div>
 <div class="result green"><span>POTENTIAL PARTICIPATING SHOPPERS</span><strong id="r-participants">—</strong><small>Unique shopper TAM × reward participation rate</small></div>
 <div class="model-section-split"><span>02 / REPEAT GROCERY VISITS & TXNs</span><h3>THE FREQUENCY ENGINE.</h3><p>Default: the same unique shopper goes grocery shopping 12 times a month. The number of people stays fixed while visits and reward transactions multiply.</p></div>
 <div class="result txn-highlight"><span>GROCERY VISITS / MONTH</span><strong id="r-visits-month">—</strong><small>Unique shoppers × monthly shopping trips</small></div>
@@ -172,10 +172,10 @@
 </div>
 <div class="chart"><div class="eyebrow">Grocery transaction funnel</div><h3>FROM VISITS TO TOKEN TRANSFERS</h3><div id="bars"></div></div>
 <div class="chart"><div class="eyebrow">Grocery-only annual reward distribution</div><h3>ONE WALLET PAIR CAN RECEIVE MANY REWARDS</h3><div class="result-cards"><div class="result txn-highlight"><span>GROCERY REWARD TXNs / YEAR</span><strong id="g-txns">—</strong></div><div class="result"><span>CHI TOKENS / DAY</span><strong id="g-d">—</strong></div><div class="result"><span>CHI TOKENS / MONTH</span><strong id="g-m">—</strong></div><div class="result"><span>CHI TOKENS / YEAR</span><strong id="g-y">—</strong></div></div><p class="smallprint" id="model-explanation"></p><p class="smallprint" id="supply-warning"></p></div>
-<div class="callout"><strong>This is a grocery-only scenario, not actual unique-user evidence.</strong><br/>The store-level daily unique shopper input is used to define a single modeled network shopper base, capped at the selected share of the U.S. population. Repeat visits drive store and token transactions. Wallets are counted once per first reward recipient. Actual wallet issuance, sponsor funding, CRO on Base and Crypto.com onboarding remain subject to implementation and validation. Population reference: <a href="https://www.census.gov/popclock/" target="_blank" rel="noopener">U.S. Census Bureau</a>.</div>
+<div class="callout"><strong>This is a grocery-only scenario, not actual unique-user evidence.</strong><br/>The store-level daily shopper input defines one modeled network shopper base. Repeat visits drive store and token transactions. Wallets are counted once per first reward recipient. Actual wallet issuance, sponsor funding, CRO on Base and Crypto.com onboarding remain subject to implementation and validation.</div>
 <div class="faq" style="margin-top:18px">
 <div class="panel"><h3>Are 12 shopping trips 12 unique shoppers?</h3><p>No. It's one person shopping 12 times in a month. The visits may qualify for recurring promotions without opening new wallets.</p></div>
-<div class="panel"><h3>Can total uniques exceed the U.S. population?</h3><p>No. The number is capped by the modeled addressable population. Shopping frequency affects TXNs, not the unique shopper base.</p></div>
+<div class="panel"><h3>Do repeat visits add more unique shoppers?</h3><p>No. The unique shopper base is calculated once. Changing monthly grocery visits changes repeat transaction volume, not the unique shopper count.</p></div>
 <div class="panel"><h3>Can each visit earn rewards?</h3><p>Only when a qualifying promotion applies. Eligibility and the annual reward-frequency limit control modeled token transfers.</p></div>
 <div class="panel"><h3>Does every reward create a new wallet?</h3><p>No. A wallet pair is created only for an eligible first-time shopper. Further rewards reuse that pair.</p></div>
 </div>
@@ -186,7 +186,6 @@
 const spec=[
 {id:'stores',title:'Grocery stores',min:100,max:15000,step:100,value:15000,unit:''},
 {id:'shoppersPerStore',title:'Unique Daily Shoppers per Store',min:1000,max:4000,step:100,value:2500,unit:''},
-{id:'addressableShare',title:'Addressable U.S. population (TAM ceiling)',min:1,max:100,step:1,value:100,unit:'%'},
 {id:'participation',title:'Reward participation rate',min:0,max:100,step:1,value:50,unit:'%'},
 {id:'visitsPerMonth',title:'Grocery visits per unique shopper / month',min:1,max:30,step:1,value:12,unit:'',group:'Repeat grocery visits & reward TXNs'},
 {id:'eligibleCheckoutRate',title:'Participating visits qualifying for CHI',min:0,max:100,step:1,value:20,unit:'%'},
@@ -205,7 +204,6 @@ for(const item of spec){
  const parent=wrapper||controls,div=document.createElement('div');div.className='control';
  const hint=item.id==='shoppersPerStore'?'Stores × this daily unique shopper input creates the total modeled unique TAM, capped nationally; do NOT multiply by days.'
   :item.id==='visitsPerMonth'?'Default 12 visits per person each month. These are repeat visits by the same shoppers.'
-  :item.id==='addressableShare'?'The population upper bound is a maximum, not a verified active customer base.'
   :item.id==='eligibleCheckoutRate'?'Only this share of participating visits qualifies for a reward transaction.'
   :item.unit?item.unit.trim()+' per event or shopper':'Adjust to test the assumption';
  div.innerHTML='<label class="control-head" for="'+item.id+'"><span>'+item.title+'</span><input aria-label="'+item.title+'" type="number" inputmode="decimal" id="'+item.id+'-num" min="'+item.min+'" max="'+item.max+'" step="'+item.step+'" value="'+item.value+'"/></label><input id="'+item.id+'" type="range" min="'+item.min+'" max="'+item.max+'" step="'+item.step+'" value="'+item.value+'"/><div class="hint" id="'+item.id+'-desc">'+hint+'</div>';
@@ -215,7 +213,7 @@ for(const item of spec){
  range.addEventListener('input',e=>update(e.target.value));num.addEventListener('change',e=>update(e.target.value));
 }
 function compute(){
- const tamCap=US_POP*inputs.addressableShare/100;
+ const tamCap=US_POP;
  const uniqueBase=Math.min(tamCap,inputs.stores*inputs.shoppersPerStore);
  const potentialUsers=uniqueBase*inputs.participation/100;
  const visitsMonth=uniqueBase*inputs.visitsPerMonth;
@@ -247,7 +245,7 @@ function render(){
  set('r-crypto-signups',short(a.cryptoSignups));set('r-payable-wallets',short(a.payableWallets));set('r-revenue',cash(a.revenue));
  set('g-txns',short(a.groceryTxns));set('g-d',short(a.annual/365));set('g-m',short(a.annual/12));set('g-y',short(a.annual));
  set('floating-chi',short(a.annual)+' CHI');
- set('model-explanation',short(a.uniqueBase)+' shoppers form the entire modeled grocery TAM (stores × daily uniques per store, capped at '+short(a.tamCap)+'). These same people visit stores '+fmt(inputs.visitsPerMonth)+' times/month, generating '+short(a.visitsMonth)+' monthly and '+short(a.visitsYear)+' annual visits. '+short(a.eligibleTxns)+' participating visits qualify; annual rewards are limited to '+short(a.groceryTxns)+' by the per-person frequency lever. Only '+short(a.walletOwners)+' first-time eligible recipients create CHI/CRO wallet pairs.');
+ set('model-explanation',short(a.uniqueBase)+' shoppers form the entire modeled grocery TAM (stores × daily uniques per store). These same people visit stores '+fmt(inputs.visitsPerMonth)+' times/month, generating '+short(a.visitsMonth)+' monthly and '+short(a.visitsYear)+' annual visits. '+short(a.eligibleTxns)+' participating visits qualify; annual rewards are limited to '+short(a.groceryTxns)+' by the per-person frequency lever. Only '+short(a.walletOwners)+' first-time eligible recipients create CHI/CRO wallet pairs.');
  set('supply-warning',a.annual>20000000000?'Token supply warning: '+short(a.annual)+' modeled CHI/year exceeds the previously described 20B CHI reward allocation; reward terms or available funding would need revision.':'Token supply comparison: '+short(a.annual)+' modeled annual CHI versus the previously described 20B reward allocation; actual funding remains unverified.');
  const series=[['Annual store visits',a.visitsYear,''],['Participating visits',a.participatingVisitsYear,'b'],['Qualifying visits',a.eligibleTxns,'c'],['CHI reward TXNs',a.groceryTxns,'d'],['CRO reward TXNs',a.croRewardTxns,'b']];
  const max=Math.max(...series.map(x=>x[1]),1);document.getElementById('bars').innerHTML=series.map(x=>'<div class="barrow"><span>'+x[0]+'</span><div class="bartrack"><div class="barfill '+x[2]+'" style="width:'+Math.max(0,Math.min(100,100*x[1]/max))+'%"></div></div><strong>'+short(x[1])+'</strong></div>').join('');
@@ -255,7 +253,7 @@ function render(){
 document.getElementById('reset').addEventListener('click',()=>{for(const item of spec){inputs[item.id]=defaults[item.id];document.getElementById(item.id).value=item.value;document.getElementById(item.id+'-num').value=item.value}render()});
 document.getElementById('export').addEventListener('click',()=>{
  const a=compute(),out=[['Metric','Value'],...spec.map(i=>[i.title,inputs[i.id]]),
- ['U.S. population upper bound',a.usPop],['Addressable population cap',a.tamCap],['Total unique grocery shopper TAM',a.uniqueBase],['Potential participating shoppers',a.potentialUsers],
+['Total unique grocery shopper TAM',a.uniqueBase],['Potential participating shoppers',a.potentialUsers],
  ['Monthly grocery visits (repeat)',a.visitsMonth],['Annual grocery visits (repeat)',a.visitsYear],['Participating annual visits',a.participatingVisitsYear],
  ['Qualifying annual visits',a.eligibleTxns],['Annual CHI reward TXNs',a.groceryTxns],['Annual CRO reward TXNs',a.croRewardTxns],
  ['All modeled token transfers',a.totalTokenTxns],['CHI tokens annually',a.annual],['CRO tokens annually',a.cro],
