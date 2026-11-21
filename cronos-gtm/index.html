@@ -20,6 +20,16 @@
 @media(max-width:1080px){.flow-stages{grid-template-columns:repeat(3,minmax(0,1fr))}.flow-ribbons{display:none}.capital-flow-track{min-height:auto}.welcome-reward{flex-wrap:wrap}.welcome-chip{margin-left:auto}}
 @media(max-width:600px){.capital-flow{padding:20px 15px;margin-top:26px}.capital-flow-header{display:block}.capital-flow-tag{display:inline-block;margin-top:14px}.flow-stages{grid-template-columns:repeat(2,minmax(0,1fr))}.flow-stage{min-height:190px}.stage-symbol,.stage-img{margin:12px auto}.welcome-reward{padding:18px;gap:12px}.welcome-reward-amount{font-size:48px}.welcome-chip{margin-left:0}.capital-flow-notes{grid-template-columns:1fr}}
 
+
+/* True split-path sponsor-to-wallet waterfall visualization */
+.waterfall-scroll{overflow-x:auto;overflow-y:hidden;max-width:100%;margin:30px 0 16px;border-radius:20px;background:linear-gradient(100deg,#0d1220,#121b2a);border:1px solid #ffffff17;scrollbar-color:#506079 #101624}
+.sankey-waterfall{display:block;width:100%;height:auto;min-width:850px}
+.sankey-lines path{transition:opacity .25s,stroke-width .25s}.waterfall-scroll:hover .sankey-lines path{opacity:1}
+.waterfall-legend{display:flex;flex-wrap:wrap;gap:16px;padding:0 22px 20px;font-size:11px;color:#c3ccda}
+.waterfall-legend span{display:flex;align-items:center;gap:8px}
+.waterfall-legend i{display:inline-block;width:28px;height:8px;border-radius:10px}
+.legend-fiat{background:linear-gradient(90deg,#ff7943,#ffb86b)}.legend-chi{background:linear-gradient(90deg,#ffbb5e,#f64e40)}.legend-cro{background:linear-gradient(90deg,#4ed8ed,#7c9bff)}
+@media(max-width:900px){.waterfall-scroll{margin-top:22px}.sankey-waterfall{min-width:850px}.waterfall-legend{padding:10px 16px 20px}}
 </style></head><body>
 <header class="nav"><div class="container nav-inner"><a class="mark" href="#pitch" aria-label="CHI Cronos pitch home"><img src="https://raw.githubusercontent.com/jhiconx/chili-coin-live-tracker/main/assets/chi-mark.png" alt="Chili Coin mark"/><span>CHI <span style="color:#ff6a42">×</span> CRONOS<small>GFT REWARDS · PARTNERSHIP CONCEPT</small></span></a><nav class="nav-links" id="nav-links"><a href="#pitch" data-nav="pitch">01 / THE BIG IDEA</a><a href="#distribution" data-nav="distribution">02 / DISTRIBUTION</a><a href="#model" data-nav="model">03 / GROWTH MODEL</a></nav><a class="nav-cta" href="#model">EXPLORE THE MODEL ↗</a><button class="mobile-menu" id="menu" aria-label="Open navigation" aria-expanded="false">☰</button></div></header>
 <main>
@@ -31,18 +41,63 @@
 <div class="container">
 <div class="capital-flow" aria-label="Proposed sponsor-to-shopper-to-Cronos reward and onboarding flow">
   <div class="capital-flow-header"><div><div class="eyebrow">One sponsor-funded journey · proposed architecture</div><h3>FIAT IN. <span class="gradient">REWARDS OUT.</span></h3><p>A brand funds a real-world promotion. GFT validates the action. CHI powers repeat participation. An optional CRO reward introduces eligible shoppers to Crypto.com.</p></div></div>
-  <div class="capital-flow-track" role="img" aria-label="Sponsor fiat flows to GFT Rewards, then shoppers activate CHI on Base, CRO reward is funded via a proposed Base or Cronos route, and eligible shoppers may enroll in Crypto.com for a proposed ten dollar CRO welcome reward">
-    <svg class="flow-ribbons" viewBox="0 0 1200 160" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="fund-flow" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff7044"/><stop offset=".5" stop-color="#f7bd68"/><stop offset="1" stop-color="#37d6f7"/></linearGradient><linearGradient id="flow-soft" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#ff6a42" stop-opacity=".15"/><stop offset="1" stop-color="#4bdcff" stop-opacity=".3"/></linearGradient></defs><path d="M0 80 C130 0 170 160 300 80 S470 0 600 80 S770 160 900 80 S1070 0 1200 80" stroke="url(#flow-soft)" stroke-width="66" fill="none"/><path d="M0 80 C130 0 170 160 300 80 S470 0 600 80 S770 160 900 80 S1070 0 1200 80" stroke="url(#fund-flow)" stroke-width="5" fill="none" stroke-linecap="round"/></svg>
-    <div class="flow-stages">
-      <div class="flow-stage"><div class="stage-num">01 / FUND</div><div class="stage-symbol">＄</div><strong>BRAND + PARTNERS</strong><small>Fiat campaign budgets</small></div>
-      <div class="flow-stage"><div class="stage-num">02 / OPERATE</div><div class="stage-symbol">G</div><strong>GFT REWARDS</strong><small>Validate, attribute and fund</small></div>
-      <div class="flow-stage"><div class="stage-num">03 / ACTIVATE</div><div class="stage-symbol">✓</div><strong>SHOPPER</strong><small>Shop · text · sample · watch</small></div>
-      <div class="flow-stage"><div class="stage-num">04 / EARN</div><img class="stage-img" src="https://raw.githubusercontent.com/jhiconx/chili-coin-live-tracker/main/assets/chi-mark.png" alt="" loading="lazy"/><strong>CHI ON BASE</strong><small>Phone-linked rewards wallet</small></div>
-      <div class="flow-stage"><div class="stage-num">05 / UNLOCK</div><img class="stage-img" src="https://cronos.com/brand/cro-logo.svg" alt="" loading="lazy"/><strong>CRO REWARD</strong><small>Proposed Base / Cronos route</small></div>
-      <div class="flow-stage"><div class="stage-num">06 / ONBOARD</div><div class="stage-symbol stage-crypto">◆</div><strong>CRYPTO.COM</strong><small>Optional verified enrollment</small></div>
-    </div>
-  </div>
-  <div class="welcome-reward"><div class="welcome-reward-amount">$10</div><div><strong>A REASON TO TAKE THE NEXT STEP.</strong><p>Example: an eligible, first-time Crypto.com customer unlocks a <b>proposed $10 sponsor-funded CRO welcome reward</b> after qualifying verification. They may keep CRO or use supported account features, subject to platform rules and availability.</p></div><div class="welcome-chip">SIGN UP → VERIFY → REWARD</div></div>
+  <div class="waterfall-scroll" role="region" aria-label="Sankey waterfall diagram of brand-funded CHI and CRO rewards" tabindex="0">
+<svg class="sankey-waterfall" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 510" role="img" aria-labelledby="sankey-title sankey-desc">
+<title id="sankey-title">From brand fiat to CHI, CRO and Crypto.com</title><desc id="sankey-desc">The brand funds GFT Rewards. GFT pays for separate CHI and CRO reward pools. A shopper takes a verified action to unlock CHI on Base, then becomes eligible for an optional CRO reward and Crypto.com signup. A proposed ten-dollar CRO reward is conditional on new verified enrollment. The diagram does not imply CHI is exchanged for CRO.</desc>
+<defs>
+  <linearGradient id="sankey-fiat" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#ff7b42"/><stop offset="1" stop-color="#ffb86b"/></linearGradient>
+  <linearGradient id="sankey-chi" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#ffba58"/><stop offset="1" stop-color="#f64e40"/></linearGradient>
+  <linearGradient id="sankey-cro" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#4ed8ed"/><stop offset="1" stop-color="#7c9bff"/></linearGradient>
+  <linearGradient id="sankey-join" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#ee7c62"/><stop offset="1" stop-color="#58d6fb"/></linearGradient>
+  <filter id="sankey-halo" x="-20%" y="-30%" width="140%" height="160%"><feGaussianBlur stdDeviation="11"/></filter>
+</defs>
+<g class="sankey-lines" fill="none" stroke-linecap="round">
+  <path d="M210 210 C249 210 246 210 290 210" stroke="url(#sankey-fiat)" stroke-width="65" opacity=".22" filter="url(#sankey-halo)"/>
+  <path d="M210 210 C249 210 246 210 290 210" stroke="url(#sankey-fiat)" stroke-width="43" opacity=".85"/>
+  <path d="M470 208 C514 208 500 151 550 151" stroke="url(#sankey-chi)" stroke-width="34" opacity=".82"/>
+  <path d="M470 227 C518 227 500 344 550 344" stroke="url(#sankey-cro)" stroke-width="16" opacity=".76"/>
+  <path d="M730 151 C767 151 759 221 805 221" stroke="url(#sankey-join)" stroke-width="32" opacity=".83"/>
+  <path d="M730 344 C770 344 762 259 805 259" stroke="url(#sankey-cro)" stroke-width="16" opacity=".78"/>
+  <path d="M985 241 C1012 241 1010 241 1030 241" stroke="url(#sankey-cro)" stroke-width="34" opacity=".86"/>
+  <path d="M640 424 C640 399 640 397 640 390" stroke="#ffbd72" stroke-width="5" opacity=".75" stroke-dasharray="7 12"/>
+</g>
+<g font-family="DM Sans,Arial,sans-serif">
+  <rect x="20" y="139" width="190" height="143" rx="18" fill="#2a2227" stroke="#ffac7480"/>
+  <text x="39" y="165" font-size="12" fill="#ffbc8d" letter-spacing="2">01 · FIAT</text>
+  <text x="39" y="206" font-size="24" font-weight="800" fill="#fff">BRANDS +</text><text x="39" y="234" font-size="24" font-weight="800" fill="#fff">PARTNERS</text>
+  <text x="39" y="262" font-size="13" fill="#cdbfbd">Sponsor-funded budgets</text>
+  <rect x="290" y="139" width="180" height="143" rx="18" fill="#252b36" stroke="#ffbd7980"/>
+  <text x="308" y="165" font-size="12" fill="#f3c493" letter-spacing="2">02 · ORCHESTRATE</text>
+  <text x="308" y="207" font-size="24" font-weight="800" fill="#fff">GFT</text><text x="308" y="236" font-size="24" font-weight="800" fill="#fff">REWARDS</text>
+  <text x="308" y="261" font-size="12" fill="#b9c6d2">Verify + allocate</text>
+  <rect x="550" y="88" width="180" height="127" rx="18" fill="#342129" stroke="#f98c637f"/>
+  <text x="567" y="113" font-size="12" fill="#ffc589" letter-spacing="2">03 · EARN</text>
+  <text x="567" y="151" font-size="23" font-weight="800" fill="#fff">CHI ON BASE</text>
+  <text x="567" y="177" font-size="13" fill="#e4bac0">Shopper reward</text><text x="567" y="195" font-size="11" fill="#d2a6b1">Phone-linked wallet</text>
+  <rect x="550" y="292" width="180" height="104" rx="18" fill="#152f46" stroke="#6ddbff72"/>
+  <text x="567" y="318" font-size="12" fill="#8be9ff" letter-spacing="2">04 · FUND</text>
+  <text x="567" y="350" font-size="20" font-weight="800" fill="#fff">CRO POOL</text>
+  <text x="567" y="375" font-size="12" fill="#b2d5e9">Separately sponsor-funded</text>
+  <rect x="805" y="170" width="180" height="143" rx="18" fill="#202c40" stroke="#77cfff92"/>
+  <text x="821" y="195" font-size="12" fill="#9aeaff" letter-spacing="2">05 · UNLOCK</text>
+  <text x="821" y="232" font-size="22" font-weight="800" fill="#fff">CRO REWARD</text>
+  <text x="821" y="258" font-size="12" fill="#c3d4e8">Optional, eligible wallet</text>
+  <text x="821" y="280" font-size="11" fill="#91acc4">Base / Cronos integration*</text>
+  <rect x="1030" y="170" width="155" height="143" rx="18" fill="#192f4b" stroke="#83d1fa96"/>
+  <text x="1045" y="195" font-size="12" fill="#9be2ff" letter-spacing="1.5">06 · ONBOARD</text>
+  <text x="1045" y="229" font-size="20" font-weight="800" fill="#fff">CRYPTO.COM</text>
+  <text x="1045" y="257" font-size="12" fill="#bad3e6">Verified new user</text>
+  <text x="1045" y="278" font-size="12" fill="#9fe9ff">Proposed $10 CRO</text>
+  <rect x="523" y="430" width="236" height="60" rx="17" fill="#2a2430" stroke="#ffc16a5c"/>
+  <text x="641" y="454" text-anchor="middle" font-weight="800" font-size="15" fill="#fff">SHOPPER ACTION</text>
+  <text x="641" y="474" text-anchor="middle" font-size="13" fill="#c9b9ca">Shop · text · sample · watch</text>
+  <text x="513" y="101" font-size="11" fill="#ffbc8a">REWARD PATH</text>
+  <text x="496" y="326" font-size="11" fill="#a1e9ff">FUNDING PATH</text>
+</g>
+</svg>
+<div class="waterfall-legend"><span><i class="legend-fiat"></i> Fiat funding</span><span><i class="legend-chi"></i> Shopper + CHI activation</span><span><i class="legend-cro"></i> Separately funded CRO rewards</span></div>
+</div>
+<div class="welcome-reward"><div class="welcome-reward-amount">$10</div><div><strong>A REASON TO TAKE THE NEXT STEP.</strong><p>Example: an eligible, first-time Crypto.com customer unlocks a <b>proposed $10 sponsor-funded CRO welcome reward</b> after qualifying verification. They may keep CRO or use supported account features, subject to platform rules and availability.</p></div><div class="welcome-chip">SIGN UP → VERIFY → REWARD</div></div>
   <div class="capital-flow-notes"><div><b>Money moves:</b> Partner fiat → GFT campaign funding → separately funded CHI and CRO reward allocations. CHI itself is not fiat-converted into CRO by this illustration.</div><div><b>Technology to confirm:</b> CRO on Base vs. Cronos, bridging, wallet custody, supported Crypto.com deposit network, eligibility, KYC and reward funding require approval and integration.</div></div>
 </div></div>
 </section>
