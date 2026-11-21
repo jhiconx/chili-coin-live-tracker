@@ -192,9 +192,82 @@
 {id:'payoutEligibleRate',title:'New CRO wallets eligible for acquisition payment',min:0,max:100,step:1,value:100,unit:'%'},
 {id:'croWelcome',title:'CRO welcome bonus per Crypto.com signup',min:0,max:20,step:.25,value:1,unit:' CRO'},
 {id:'walletFee',title:'Proposed fee / qualified new CRO wallet',min:0,max:250,step:5,value:100,unit:' USD'}];let inputs={};const defaults={};for(const s of spec){inputs[s.id]=s.value;defaults[s.id]=s.value}const controls=document.getElementById('control-list');let wrapper;for(const s of spec){if(s.group){wrapper=document.createElement('details');wrapper.className='control-group';wrapper.open=false;wrapper.innerHTML='<summary>'+s.group+'</summary>';controls.append(wrapper)}let parent=wrapper||controls;let div=document.createElement('div');div.className='control';div.innerHTML='<label class="control-head" for="'+s.id+'"><span>'+s.title+'</span><input aria-label="'+s.title+'" type="number" inputmode="decimal" id="'+s.id+'-num" min="'+s.min+'" max="'+s.max+'" step="'+s.step+'" value="'+s.value+'"/></label><input id="'+s.id+'" type="range" min="'+s.min+'" max="'+s.max+'" step="'+s.step+'" value="'+s.value+'"/><div class="hint" id="'+s.id+'-desc">'+(s.id==='shoppersPerStore'?'Daily shoppers at each store, not nationally unique people':s.id==='visitsPerShopper'?'Divides annual store visits into an estimated distinct shopper pool':s.id==='crossStoreOverlap'?'Reduces estimated unique people who shop at multiple network stores':s.id==='addressableShare'?'The population ceiling for wallet acquisition (100% is a theoretical upper bound)':s.id==='eligibleCheckoutRate'?'Share of engaged checkout visits that qualify for a CHI/CRO reward':s.id==='extraRewardsPerUser'?'Repeat promotions on radio, campus and entertainment channels':s.unit?s.unit.trim()+' per event or user as labeled':'Adjust to test the assumption')+'</div>';parent.append(div);const range=div.querySelector('input[type=range]'),num=div.querySelector('input[type=number]');function update(v){let a=Number(v);if(!Number.isFinite(a))return;a=Math.min(s.max,Math.max(s.min,a));inputs[s.id]=a;range.value=String(a);num.value=String(a);render()}range.addEventListener('input',e=>update(e.target.value));num.addEventListener('change',e=>update(e.target.value))}
-function compute(){const dailyGroceryReach=inputs.stores*inputs.shoppersPerStore;const grocery=dailyGroceryReach*365/inputs.visitsPerShopper;const radio=inputs.stations*inputs.radioReach;const campus=inputs.campuses*inputs.campusReach;const movie=inputs.movies*inputs.movieReach;const extra=(radio+campus+movie)*(1-inputs.overlap/100);const audience=grocery+extra;const users=audience*inputs.participation/100;const events=users*inputs.rewardsPerYear;const annual=events*inputs.chiPerReward;const chiWallets=users;const croWallets=users;const totalWallets=chiWallets+croWallets;const cryptoSignups=croWallets*inputs.cryptoSignupRate/100;const payableWallets=croWallets*inputs.payoutEligibleRate/100;const cro=events*inputs.croPerReward+cryptoSignups*inputs.croWelcome;const revenue=payableWallets*inputs.walletFee;const groceryAnnual=grocery*inputs.participation/100*inputs.rewardsPerYear*inputs.chiPerReward;return{dailyGroceryReach,grocery,radio,campus,movie,audience,users,events,annual,cro,chiWallets,croWallets,totalWallets,cryptoSignups,payableWallets,revenue,groceryAnnual}}
-let computed;function set(id,v){document.getElementById(id).textContent=v}function render(){computed=compute();const a=computed;set('r-grocery',short(a.grocery));set('r-grocery-daily',short(a.dailyGroceryReach));set('hero-daily-shoppers',short(a.dailyGroceryReach));set('r-audience',short(a.audience));set('r-participants',short(a.users));set('r-daily',short(a.annual/365));set('r-monthly',short(a.annual/12));set('r-annually',short(a.annual));set('r-cro',short(a.cro));set('r-wallet-pairs-daily',short(a.chiWallets/365));set('r-wallet-pairs-monthly',short(a.chiWallets/12));set('r-chi-wallets',short(a.chiWallets));set('r-cro-wallets',short(a.croWallets));set('r-total-wallets',short(a.totalWallets));set('r-crypto-signups',short(a.cryptoSignups));set('r-payable-wallets',short(a.payableWallets));set('r-revenue',cash(a.revenue));set('g-d',short(a.groceryAnnual/365));set('g-m',short(a.groceryAnnual/12));set('g-y',short(a.groceryAnnual));set('floating-chi',short(a.groceryAnnual)+' CHI');const series=[['Grocery',a.grocery,''],['Radio',a.radio,'b'],['Campus',a.campus,'c'],['Entertainment',a.movie,'d']];let max=Math.max(...series.map(x=>x[1]),1);document.getElementById('bars').innerHTML=series.map(x=>'<div class="barrow"><span>'+x[0]+'</span><div class="bartrack"><div class="barfill '+x[2]+'" style="width:'+Math.max(0,Math.min(100,100*x[1]/max))+'%"></div></div><strong>'+short(x[1])+'</strong></div>').join('')}
-document.getElementById('reset').addEventListener('click',()=>{for(const s of spec){inputs[s.id]=defaults[s.id];document.getElementById(s.id).value=s.value;document.getElementById(s.id+'-num').value=s.value}render()});document.getElementById('export').addEventListener('click',()=>{const out=[['Field','Value'],...spec.map(s=>[s.title,inputs[s.id]]),['Unique daily grocery shoppers (store-level)',computed.dailyGroceryReach],['Estimated annual distinct grocery shoppers',computed.grocery],['Unduplicated audience',computed.audience],['Participating users',computed.users],['CHI per day',computed.annual/365],['CHI per month',computed.annual/12],['CHI per year',computed.annual],['CRO per year',computed.cro],['Average new paired wallets per day (1 CHI and 1 CRO)',computed.chiWallets/365],['Average new paired wallets per month (1 CHI and 1 CRO)',computed.chiWallets/12],['New unique CHI wallets on Base',computed.chiWallets],['New unique CRO wallets on Base',computed.croWallets],['Total new reward wallets',computed.totalWallets],['Optional Crypto.com exchange signups',computed.cryptoSignups],['Payout-eligible new CRO wallets',computed.payableWallets],['Illustrative fee revenue USD',computed.revenue],['Disclaimer','Hypothetical scenario; partner terms and audiences not verified']];const csv=out.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));link.download='chi-cronos-growth-scenario.csv';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)});
+function compute(){
+ const usPop=343028698; // U.S. Census Bureau, November 21, 2026 snapshot
+ const tamCap=usPop*inputs.addressableShare/100;
+ const storeVisitsDaily=inputs.stores*inputs.shoppersPerStore;
+ const storeVisitsYear=storeVisitsDaily*365;
+ const overlapFactor=1-inputs.crossStoreOverlap/100;
+ const dailyGroceryReach=Math.min(tamCap,storeVisitsDaily*overlapFactor);
+ const grossAnnualGroceryUnique=storeVisitsYear/Math.max(1,inputs.visitsPerShopper);
+ const grocery=Math.min(tamCap,grossAnnualGroceryUnique*overlapFactor);
+ const radio=inputs.stations*inputs.radioReach;
+ const campus=inputs.campuses*inputs.campusReach;
+ const movie=inputs.movies*inputs.movieReach;
+ const extraCandidates=(radio+campus+movie)*(1-inputs.overlap/100);
+ const extra=Math.min(Math.max(0,tamCap-grocery),extraCandidates);
+ const audience=grocery+extra;
+ const groceryInterested=grocery*inputs.participation/100;
+ const extraInterested=extra*inputs.participation/100;
+ const groceryEligibleTxns=storeVisitsYear*inputs.participation/100*inputs.eligibleCheckoutRate/100;
+ const groceryTxns=Math.min(groceryEligibleTxns,groceryInterested*inputs.rewardsPerYear);
+ const extraTxns=extraInterested*inputs.extraRewardsPerUser;
+ // One successful first-time CHI reward is needed to create each wallet pair.
+ const groceryRecipients=Math.min(groceryInterested,groceryTxns);
+ const extraRecipients=Math.min(extraInterested,extraTxns);
+ const users=groceryRecipients+extraRecipients;
+ const events=groceryTxns+extraTxns;
+ const annual=events*inputs.chiPerReward;
+ const chiWallets=users,croWallets=users,totalWallets=users*2;
+ const cryptoSignups=croWallets*inputs.cryptoSignupRate/100;
+ const payableWallets=croWallets*inputs.payoutEligibleRate/100;
+ const croRewardTxns=inputs.croPerReward>0?events:0;
+ const croWelcomeTxns=inputs.croWelcome>0?cryptoSignups:0;
+ const totalTokenTxns=events+croRewardTxns+croWelcomeTxns;
+ const cro=croRewardTxns*inputs.croPerReward+cryptoSignups*inputs.croWelcome;
+ const revenue=payableWallets*inputs.walletFee;
+ const groceryAnnual=groceryTxns*inputs.chiPerReward;
+ return{usPop,tamCap,storeVisitsDaily,storeVisitsYear,dailyGroceryReach,grossAnnualGroceryUnique,grocery,radio,campus,movie,extra,audience,users,groceryInterested,groceryEligibleTxns,groceryTxns,extraTxns,events,annual,cro,chiWallets,croWallets,totalWallets,cryptoSignups,payableWallets,croRewardTxns,croWelcomeTxns,totalTokenTxns,revenue,groceryAnnual};
+}
+let computed;function set(id,v){document.getElementById(id).textContent=v}function render(){
+ computed=compute();const a=computed;
+ set('r-us-pop',short(a.usPop));
+ set('r-grocery-daily',short(a.storeVisitsDaily));
+ set('r-daily-unique',short(a.dailyGroceryReach));
+ set('r-grocery',short(a.grocery));
+ set('hero-daily-shoppers',short(a.storeVisitsDaily));
+ set('r-audience',short(a.audience));
+ set('r-participants',short(a.users));
+ set('r-store-visits-year',short(a.storeVisitsYear));
+ set('r-eligible-store-txns',short(a.groceryEligibleTxns));
+ set('r-chi-txns-day',short(a.events/365));
+ set('r-chi-txns-year',short(a.events));
+ set('r-cro-txns-year',short(a.croRewardTxns));
+ set('r-token-txns-year',short(a.totalTokenTxns));
+ set('r-daily',short(a.annual/365));
+ set('r-monthly',short(a.annual/12));
+ set('r-annually',short(a.annual));
+ set('r-cro',short(a.cro));
+ set('r-wallet-pairs-daily',short(a.chiWallets/365));
+ set('r-wallet-pairs-monthly',short(a.chiWallets/12));
+ set('r-chi-wallets',short(a.chiWallets));
+ set('r-cro-wallets',short(a.croWallets));
+ set('r-total-wallets',short(a.totalWallets));
+ set('r-crypto-signups',short(a.cryptoSignups));
+ set('r-payable-wallets',short(a.payableWallets));
+ set('r-revenue',cash(a.revenue));
+ set('g-txns',short(a.groceryTxns));
+ set('g-d',short(a.groceryAnnual/365));
+ set('g-m',short(a.groceryAnnual/12));
+ set('g-y',short(a.groceryAnnual));
+ set('floating-chi',short(a.groceryAnnual)+' CHI');
+ document.getElementById('model-explanation').textContent='Annual store visits = '+short(a.storeVisitsDaily)+' daily shoppers × 365 = '+short(a.storeVisitsYear)+' repeat visits. Estimated annual unique grocery shoppers = '+short(a.storeVisitsYear)+' ÷ '+fmt(inputs.visitsPerShopper)+' visits/person, less '+fmt(inputs.crossStoreOverlap)+'% cross-store overlap, capped at '+short(a.tamCap)+'. Grocery reward TXNs = the lower of '+short(a.groceryEligibleTxns)+' eligible visits and '+short(a.groceryInterested*inputs.rewardsPerYear)+' per-user-frequency capacity. CHI/CRO wallet pairs are created only for distinct first-time recipients.';
+ document.getElementById('supply-warning').textContent=a.annual>20000000000?'CHI supply planning: '+short(a.annual)+' CHI/year exceeds the previously referenced 20B reward allocation. A funded allocation, adjusted amounts or fewer qualifying rewards would be needed.':'CHI supply planning: '+short(a.annual)+' CHI/year versus the previously referenced 20B allocation; actual available reward inventory remains unverified.';
+ const series=[['Grocery',a.grocery,''],['Radio',a.radio,'b'],['Campus',a.campus,'c'],['Entertainment',a.movie,'d']];
+ const max=Math.max(...series.map(x=>x[1]),1);
+ document.getElementById('bars').innerHTML=series.map(x=>'<div class="barrow"><span>'+x[0]+'</span><div class="bartrack"><div class="barfill '+x[2]+'" style="width:'+Math.max(0,Math.min(100,100*x[1]/max))+'%"></div></div><strong>'+short(x[1])+'</strong></div>').join('');
+}
+document.getElementById('reset').addEventListener('click',()=>{for(const s of spec){inputs[s.id]=defaults[s.id];document.getElementById(s.id).value=s.value;document.getElementById(s.id+'-num').value=s.value}render()});document.getElementById('export').addEventListener('click',()=>{const out=[['Field','Value'],...spec.map(s=>[s.title,inputs[s.id]]),['Grocery shopper visits per day',computed.storeVisitsDaily],['Daily distinct shoppers after store overlap',computed.dailyGroceryReach],['Annual store visits including repeats',computed.storeVisitsYear],['U.S. population absolute cap',computed.usPop],['Addressable shopper TAM ceiling',computed.tamCap],['Estimated annual unique grocery shoppers',computed.grocery],['National unique audience (capped)',computed.audience],['Qualifying store checkout visits',computed.groceryEligibleTxns],['Grocery reward TXNs/year',computed.groceryTxns],['CHI reward TXNs/year',computed.events],['CRO reward TXNs/year',computed.croRewardTxns],['Total token transfers/year',computed.totalTokenTxns],['Participating users',computed.users],['CHI per day',computed.annual/365],['CHI per month',computed.annual/12],['CHI per year',computed.annual],['CRO per year',computed.cro],['Average new paired wallets per day (1 CHI and 1 CRO)',computed.chiWallets/365],['Average new paired wallets per month (1 CHI and 1 CRO)',computed.chiWallets/12],['New unique CHI wallets on Base',computed.chiWallets],['New unique CRO wallets on Base',computed.croWallets],['Total new reward wallets',computed.totalWallets],['Optional Crypto.com exchange signups',computed.cryptoSignups],['Payout-eligible new CRO wallets',computed.payableWallets],['Illustrative fee revenue USD',computed.revenue],['Disclaimer','Hypothetical scenario; partner terms and audiences not verified']];const csv=out.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));link.download='chi-cronos-growth-scenario.csv';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)});
 const links=document.querySelectorAll('[data-nav]');function route(){const page=location.hash.replace('#','')||'pitch';const target=['pitch','distribution','model'].includes(page)?page:'pitch';document.querySelectorAll('.page').forEach(e=>e.classList.toggle('active',e.id===target));links.forEach(e=>{const on=e.getAttribute('data-nav')===target;e.classList.toggle('active',on);on?e.setAttribute('aria-current','page'):e.removeAttribute('aria-current')});document.getElementById('nav-links').classList.remove('open');document.getElementById('menu').setAttribute('aria-expanded','false');window.scrollTo({top:0,behavior:'instant'});document.title=['pitch','distribution','model'].indexOf(target)===0?'CHI × Cronos | The Everyday Onramp':target==='distribution'?'CHI × Cronos | Distribution Network':'CHI × Cronos | Growth Model'}window.addEventListener('hashchange',route);document.getElementById('menu').addEventListener('click',()=>{let nav=document.getElementById('nav-links');nav.classList.toggle('open');document.getElementById('menu').setAttribute('aria-expanded',String(nav.classList.contains('open')))});render();route();if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))}
 })();
 </script></body></html>
