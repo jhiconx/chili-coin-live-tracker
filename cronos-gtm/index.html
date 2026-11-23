@@ -90,6 +90,20 @@
 @media(max-width:1020px){.home-model-embed .dashboard{grid-template-columns:1fr}.home-model-embed .controls{position:relative;top:auto;max-height:none;overflow:visible}}
 @media(max-width:600px){.home-model-embed{padding:15px 12px;border-radius:17px;margin:26px 0 48px}.home-model-embed .result-cards{grid-template-columns:1fr}.home-model-heading h3{font-size:27px}.home-model-embed .controls{padding:18px}.home-model-embed .chart{padding:15px}}
 
+
+/* Spotlight new wallet acquisition immediately beneath the unique shopper TAM */
+.minted-wallet-growth{grid-column:1/-1;margin:18px 0 10px;padding:clamp(20px,3vw,34px);border-radius:24px;background:linear-gradient(120deg,rgba(255,102,61,.14),rgba(61,167,245,.13)),#101929;border:1px solid rgba(255,171,113,.38);box-shadow:inset 0 1px 0 #ffffff16,0 20px 48px #0002}
+.minted-wallet-intro{margin-bottom:23px}
+.minted-wallet-intro .eyebrow{color:#ffbd92}
+.minted-wallet-intro h3{font:800 clamp(24px,3.1vw,39px)/1.1 'Space Grotesk',sans-serif;letter-spacing:-.04em;margin:9px 0 12px}
+.minted-wallet-intro p{margin:0;max-width:700px;font-size:13px;line-height:1.6;color:#b9c8dc}
+.minted-wallet-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.minted-wallet-grid .result{min-height:170px;padding:25px;border-width:1px}
+.minted-wallet-grid .result strong{font-size:clamp(35px,4vw,55px);letter-spacing:-.045em;margin:18px 0 12px}
+.minted-wallet-grid .result.green{background:linear-gradient(135deg,#203329,#121b2c);border-color:#8bf1c070}
+.minted-wallet-grid .result.blue{background:linear-gradient(135deg,#15364a,#111a2d);border-color:#5bdbff75}
+@media(max-width:600px){.minted-wallet-grid{grid-template-columns:1fr}.minted-wallet-growth{padding:17px;margin:12px 0}.minted-wallet-grid .result{min-height:146px}.minted-wallet-grid .result strong{font-size:38px}}
+
 </style></head><body>
 <header class="nav"><div class="container nav-inner"><a class="mark" href="#pitch" aria-label="CHI Cronos pitch home"><img src="https://raw.githubusercontent.com/jhiconx/chili-coin-live-tracker/main/assets/chi-mark.png" alt="Chili Coin mark"/><span>CHI <span style="color:#ff6a42">×</span> CRONOS<small>GFT REWARDS · PARTNERSHIP CONCEPT</small></span></a><nav class="nav-links" id="nav-links"><a href="#pitch" data-nav="pitch">01 / THE BIG IDEA</a><a href="#distribution" data-nav="distribution">02 / DISTRIBUTION</a><a href="#model" data-nav="model">03 / GROWTH MODEL</a><a href="#deal" data-nav="deal">04 / THE DEAL</a></nav><a class="nav-cta" href="#model">EXPLORE THE MODEL ↗</a><button class="mobile-menu" id="menu" aria-label="Open navigation" aria-expanded="false">☰</button></div></header>
 <main>
@@ -195,6 +209,18 @@
 
 <div class="result orange"><span>TOTAL UNIQUE GROCERY SHOPPERS · TAM</span><strong id="r-grocery">—</strong><small>Daily unique shoppers/store × stores; one modeled shopper base</small></div>
 <div class="result green"><span>POTENTIAL PARTICIPATING SHOPPERS</span><strong id="r-participants">—</strong><small>Unique shopper TAM × reward participation rate</small></div>
+
+<div class="minted-wallet-growth">
+ <div class="minted-wallet-intro">
+  <div class="eyebrow">Wallet acquisition · one-time issuance</div>
+  <h3>MINTED <span class="gradient">WALLET GROWTH.</span></h3>
+  <p>Each first-time eligible CHI recipient creates one CHI wallet and one paired CRO Native Wallet. Repeat rewards use those existing wallets.</p>
+ </div>
+ <div class="minted-wallet-grid">
+  <div class="result green"><span>NEW CHI WALLETS · BASE</span><strong id="r-chi-wallets">—</strong><small>One per first eligible CHI recipient</small></div>
+  <div class="result blue"><span>NEW CRO NATIVE WALLETS</span><strong id="r-cro-wallets">—</strong><small>One CRO Native Wallet per first-time CHI recipient in the proposed model</small></div>
+ </div>
+</div>
 <div class="model-section-split"><span>02 / REPEAT GROCERY VISITS & TXNs</span><h3>THE FREQUENCY ENGINE.</h3></div>
 <div class="result txn-highlight"><span>GROCERY VISITS / MONTH</span><strong id="r-visits-month">—</strong><small>Unique shoppers × monthly shopping trips</small></div>
 <div class="result txn-highlight"><span>GROCERY VISITS / YEAR</span><strong id="r-visits-year">—</strong></div>
@@ -209,8 +235,7 @@
 <div class="result"><span>CHI TOKENS / YEAR</span><strong id="r-annually">—</strong><small>CHI reward TXNs × CHI per reward</small></div>
 <div class="result blue"><span>CRO REWARD TOKENS / YEAR</span><strong id="r-cro">—</strong><small>CRO reward TXNs × CRO per reward (excludes one-time welcome bonuses)</small></div><div class="result"><span>ONE-TIME CRO WELCOME BONUSES / YEAR</span><strong id="r-cro-bonus">—</strong><small>Optional Crypto.com signups × CRO welcome bonus</small></div><div class="result blue"><span>TOTAL CRO TOKENS / YEAR</span><strong id="r-cro-total">—</strong><small>Recurring CRO rewards + one-time welcome bonuses</small></div>
 <div class="model-section-split"><span>03 / UNIQUE WALLETS & ECONOMICS</span><h3>ACQUIRE ONCE. RETAIN THROUGH TXNs.</h3><p>Wallet acquisition is one time per first qualifying recipient. Repeat shopping generates reward activity, not repeat acquisitions.</p></div>
-<div class="result green"><span>NEW CHI WALLETS · BASE</span><strong id="r-chi-wallets">—</strong><small>One per first eligible CHI recipient</small></div>
-<div class="result blue"><span>NEW CRO NATIVE WALLETS</span><strong id="r-cro-wallets">—</strong><small>One CRO Native Wallet per first-time CHI recipient in the proposed model</small></div>
+
 
 
 <div class="result"><span>AVG WALLET PAIRS CREATED / MONTH</span><strong id="r-wallet-pairs-monthly">—</strong><small>First-time recipients ÷ 12</small></div>
