@@ -198,8 +198,8 @@
 <div class="model-section-split"><span>02 / REPEAT GROCERY VISITS & TXNs</span><h3>THE FREQUENCY ENGINE.</h3></div>
 <div class="result txn-highlight"><span>GROCERY VISITS / MONTH</span><strong id="r-visits-month">—</strong><small>Unique shoppers × monthly shopping trips</small></div>
 <div class="result txn-highlight"><span>GROCERY VISITS / YEAR</span><strong id="r-visits-year">—</strong></div>
-<div class="result"><span>PARTICIPATING VISITS / YEAR</span><strong id="r-participating-visits">—</strong><small>Visits attributable to participating shoppers</small></div>
-<div class="result"><span>QUALIFYING CHECKOUTS / YEAR</span><strong id="r-eligible-txns">—</strong><small>Participating visits × qualifying promotion rate</small></div>
+
+
 <div class="result txn-highlight"><span>CHI REWARD TXNs / YEAR</span><strong id="r-chi-txns-year">—</strong><small>Qualifying visits, limited by annual rewards per shopper</small></div>
 <div class="result txn-highlight blue"><span>CRO REWARD TXNs / YEAR</span><strong id="r-cro-txns-year">—</strong><small>One modeled CRO transfer per CHI reward if enabled</small></div>
 <div class="result txn-highlight"><span>TOTAL TOKEN TRANSFER TXNs / YEAR</span><strong id="r-token-txns-year">—</strong><small>CHI + CRO transfers + eligible welcome bonuses</small></div>
@@ -211,8 +211,8 @@
 <div class="model-section-split"><span>03 / UNIQUE WALLETS & ECONOMICS</span><h3>ACQUIRE ONCE. RETAIN THROUGH TXNs.</h3><p>Wallet acquisition is one time per first qualifying recipient. Repeat shopping generates reward activity, not repeat acquisitions.</p></div>
 <div class="result green"><span>NEW CHI WALLETS · BASE</span><strong id="r-chi-wallets">—</strong><small>One per first eligible CHI recipient</small></div>
 <div class="result blue"><span>NEW CRO NATIVE WALLETS</span><strong id="r-cro-wallets">—</strong><small>One CRO Native Wallet per first-time CHI recipient in the proposed model</small></div>
-<div class="result green"><span>COMBINED NEW WALLET RECORDS</span><strong id="r-total-wallets">—</strong><small>Two records per person; not twice the people</small></div>
-<div class="result"><span>AVG WALLET PAIRS CREATED / DAY</span><strong id="r-wallet-pairs-daily">—</strong><small>First-time recipients ÷ 365</small></div>
+
+
 <div class="result"><span>AVG WALLET PAIRS CREATED / MONTH</span><strong id="r-wallet-pairs-monthly">—</strong><small>First-time recipients ÷ 12</small></div>
 <div class="result"><span>OPTIONAL CRYPTO.COM SIGNUPS</span><strong id="r-crypto-signups">—</strong><small>CRO Native Wallet owners × exchange signup conversion</small></div>
 <div class="result"><span>PAYOUT-ELIGIBLE NEW CRO NATIVE WALLETS</span><strong id="r-payable-wallets">—</strong><small>New CRO Native Wallet owners × contracted eligibility assumption</small></div>
@@ -327,10 +327,10 @@ let computed;function set(id,v){const el=document.getElementById(id);if(el)el.te
 function render(){
  const a=computed=compute();
  set('r-grocery',short(a.uniqueBase));set('hero-daily-shoppers',short(a.uniqueBase));set('r-participants',short(a.potentialUsers));
- set('r-visits-month',short(a.visitsMonth));set('r-visits-year',short(a.visitsYear));set('r-participating-visits',short(a.participatingVisitsYear));set('r-eligible-txns',short(a.eligibleTxns));
+ set('r-visits-month',short(a.visitsMonth));set('r-visits-year',short(a.visitsYear));
  set('r-chi-txns-year',short(a.groceryTxns));set('r-cro-txns-year',short(a.croRewardTxns));set('r-token-txns-year',short(a.totalTokenTxns));set('r-chi-txns-day',short(a.groceryTxns/365));
  set('r-daily',short(a.annual/365));set('r-monthly',short(a.annual/12));set('r-annually',short(a.annual));set('r-cro',short(a.croRewardTokens));set('r-cro-bonus',short(a.croBonusTokens));set('r-cro-total',short(a.cro));
- set('r-chi-wallets',short(a.chiWallets));set('r-cro-wallets',short(a.croWallets));set('r-total-wallets',short(a.totalWallets));set('r-wallet-pairs-daily',short(a.walletOwners/365));set('r-wallet-pairs-monthly',short(a.walletOwners/12));
+ set('r-chi-wallets',short(a.chiWallets));set('r-cro-wallets',short(a.croWallets));set('r-wallet-pairs-monthly',short(a.walletOwners/12));
  set('r-crypto-signups',short(a.cryptoSignups));set('r-payable-wallets',short(a.payableWallets));set('r-revenue',cash(a.revenue));
  set('g-txns',short(a.groceryTxns));set('g-d',short(a.annual/365));set('g-m',short(a.annual/12));set('g-y',short(a.annual));
  
