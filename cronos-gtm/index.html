@@ -77,13 +77,35 @@
 
 /* Distribution hero: no KPI strip, and no empty vertical gap before the first channel */
 @media(max-width:720px){.distribution-hero{padding:60px 0 18px}}
+
+/* Full interactive growth calculator embedded below the thesis on Page 1 */
+.home-model-embed{margin:42px 0 68px;padding:clamp(18px,2.7vw,36px);border-radius:28px;border:1px solid #ffffff22;background:linear-gradient(145deg,#10172a,#080f1e);box-shadow:0 32px 80px rgba(0,0,0,.28)}
+.home-model-heading{margin-bottom:26px}.home-model-heading h3{font:800 clamp(28px,3.8vw,49px)/1.08 'Space Grotesk',sans-serif;letter-spacing:-.045em;margin:12px 0}
+.home-model-heading p{font-size:14px;color:#afbdce;max-width:760px;margin:0}
+.home-model-embed .dashboard{grid-template-columns:minmax(250px,320px) minmax(0,1fr);gap:18px}
+.home-model-embed .controls{position:sticky;top:90px;max-height:calc(100vh - 105px)}
+.home-model-embed .result-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+.home-model-embed .result{padding:17px;min-height:134px}.home-model-embed .result strong{font-size:clamp(22px,2.3vw,34px)}
+.home-model-embed .wallet-pairing{padding:17px}
+@media(max-width:1020px){.home-model-embed .dashboard{grid-template-columns:1fr}.home-model-embed .controls{position:relative;top:auto;max-height:none;overflow:visible}}
+@media(max-width:600px){.home-model-embed{padding:15px 12px;border-radius:17px;margin:26px 0 48px}.home-model-embed .result-cards{grid-template-columns:1fr}.home-model-heading h3{font-size:27px}.home-model-embed .controls{padding:18px}.home-model-embed .chart{padding:15px}}
+
 </style></head><body>
 <header class="nav"><div class="container nav-inner"><a class="mark" href="#pitch" aria-label="CHI Cronos pitch home"><img src="https://raw.githubusercontent.com/jhiconx/chili-coin-live-tracker/main/assets/chi-mark.png" alt="Chili Coin mark"/><span>CHI <span style="color:#ff6a42">×</span> CRONOS<small>GFT REWARDS · PARTNERSHIP CONCEPT</small></span></a><nav class="nav-links" id="nav-links"><a href="#pitch" data-nav="pitch">01 / THE BIG IDEA</a><a href="#distribution" data-nav="distribution">02 / DISTRIBUTION</a><a href="#model" data-nav="model">03 / GROWTH MODEL</a><a href="#deal" data-nav="deal">04 / THE DEAL</a></nav><a class="nav-cta" href="#model">EXPLORE THE MODEL ↗</a><button class="mobile-menu" id="menu" aria-label="Open navigation" aria-expanded="false">☰</button></div></header>
 <main>
 <section class="page" id="pitch">
 <div class="hero grain"><div class="container hero-inner"><div class="hero-copy"><div class="eyebrow">The everyday onramp · 2026 concept</div><h1>THE NEXT<br/>MILLION<br/><span class="gradient">WALLETS</span><br/>START HERE.</h1><p class="lead">What if earning crypto felt as normal as buying groceries? CHI turns everyday participation into rewards. Cronos brings a path to an open digital economy.</p><div class="hero-buttons"><a href="#distribution" class="primary">DISCOVER THE NETWORK <span>↗</span></a><a href="#model" class="secondary">RUN THE NUMBERS <span>↗</span></a></div><div class="hero-footnote">Concept for discussion with Cronos / Crypto.com. No partnership or listing is represented as approved.</div><div class="hero-number-row"><div class="hero-number"><strong>15,000</strong><span>target grocery stores</span></div><div class="hero-number"><strong id="hero-daily-shoppers">37.5M</strong><span>Shopper Count</span></div></div></div><div class="hero-right"><div class="mascot-orbit completed-crypto-hat"><img class="mascot integrated-crypto-hat" src="/assets/chili-crypto-original-home.webp?v=3" alt="Original smiling, winking Chili mascot waving, wearing a gold cap with Crypto.com logo" loading="eager" decoding="async" fetchpriority="high" onerror="this.onerror=null;this.src='https://raw.githubusercontent.com/jhiconx/chili-coin-live-tracker/main/assets/chili-mascot.webp'"/></div><div class="hero-cronos-logo" role="img" aria-label="Cronos logo"><img src="https://cronos.com/brand/cronos-wordmark-light.svg" alt="Cronos" loading="eager" decoding="async" onerror="this.hidden=true;this.nextElementSibling.hidden=false"/><span class="cronos-logo-fallback" hidden>◈ cronos</span></div></div></div></div></div>
 <div class="brandbar"><div class="container brands"><span class="label">A PROPOSED ECOSYSTEM</span><span class="brand-name"><img src="https://raw.githubusercontent.com/jhiconx/chili-coin-live-tracker/main/assets/chi-mark.png" alt="CHI mark"/>CHILI COIN</span><span class="brand-name">GFT <span style="font-weight:500;color:#c8d2e1">REWARDS</span></span><img class="cronosword" src="https://cronos.com/brand/cronos-wordmark-light.svg" alt="Cronos logo"/><span class="brand-name crypto"><img src="https://fastly.mwm-storage.mwmcdn.com/raw_files/c43b57ac-923f-489f-8216-37b086b55987?format=webp&amp;height=100" alt="Crypto.com lion shield"/>crypto.com</span></div></div>
-<section class="section"><div class="container"><div class="section-head"><h2>Don't ask people to buy crypto.<br/><span class="gradient">Give them a reason to use it.</span></h2><p class="lead">Every purchase, broadcast, brand sampling event and entertainment offer can become a verified opportunity to earn CHI—and, subject to a commercial agreement, unlock CRO.</p></div><div class="grid3"><article class="panel"><div class="iconbox">①</div><h3>Meet them where they are</h3><p>At the register, in a radio promotion, on campus or through a movie offer. No trading app required to begin the CHI rewards experience.</p></article><article class="panel"><div class="iconbox">②</div><h3>Reward a real action</h3><p>Verify a purchase, redemption or approved engagement. Deliver CHI into a phone-linked shopper wallet. Sponsor-funded CRO is the proposed next unlock.</p></article><article class="panel"><div class="iconbox">③</div><h3>Open the wider world</h3><p>Eligible customers can opt into Crypto.com and potentially deposit, hold, trade or use CRO, subject to account eligibility and supported networks.</p></article></div></div></section>
+<section class="section"><div class="container"><div class="section-head"><h2>Don't ask people to buy crypto.<br/><span class="gradient">Give them a reason to use it.</span></h2><p class="lead">Every purchase, broadcast, brand sampling event and entertainment offer can become a verified opportunity to earn CHI—and, subject to a commercial agreement, unlock CRO.</p></div>
+<div class="home-model-embed" id="home-model-embed" aria-label="Interactive Explore the Model calculator">
+ <div class="home-model-heading">
+  <div class="eyebrow">Explore the Model · Interactive grocery calculator</div>
+  <h3>FROM UNIQUE SHOPPERS <span class="gradient">TO REPEAT REWARDS.</span></h3>
+  <p>Adjust the same assumptions used in the Growth Model. Changes here and on Page 3 stay in sync.</p>
+ </div>
+ <div id="home-model-slot"></div>
+</div>
+<div class="grid3"><article class="panel"><div class="iconbox">①</div><h3>Meet them where they are</h3><p>At the register, in a radio promotion, on campus or through a movie offer. No trading app required to begin the CHI rewards experience.</p></article><article class="panel"><div class="iconbox">②</div><h3>Reward a real action</h3><p>Verify a purchase, redemption or approved engagement. Deliver CHI into a phone-linked shopper wallet. Sponsor-funded CRO is the proposed next unlock.</p></article><article class="panel"><div class="iconbox">③</div><h3>Open the wider world</h3><p>Eligible customers can opt into Crypto.com and potentially deposit, hold, trade or use CRO, subject to account eligibility and supported networks.</p></article></div></div></section>
 <section class="section section-dark"><div class="container split"><div class="photo" style="background-image:url('/assets/grocery-checkout-woman.avif?v=1');background-position:center center" aria-label="Woman at the grocery checkout with a GFT phone-number rewards sign and Kraft products"><div class="caption"><span class="pill orange">The everyday habit</span><br/><br/>One grocery trip can start a new relationship.</div></div><div><div class="eyebrow">How the unlock works</div><h2>FROM THE <span class="gradient">CHECKOUT</span><br/>TO CRONOS.</h2><div class="list"><div class="list-row"><span>1</span><div><b>Shop / listen / sample / watch</b><p>Complete an eligible brand-funded action and identify through the GFT phone-number flow.</p></div></div><div class="list-row"><span>2</span><div><b>CHI arrives</b><p>Reward value is delivered to a phone-linked CHI wallet after the action clears the program rules.</p></div></div><div class="list-row"><span>3</span><div><b>Create a paired CRO wallet</b><p>Every unique first-time CHI recipient also receives a CRO wallet on Base in the proposed model. CRO distributions require supported deployment and funding.</p></div></div><div class="list-row"><span>4</span><div><b>Keep earning—or optionally join Crypto.com</b><p>The paired CRO wallet exists independently of an exchange account. Eligible shoppers may later sign up or transfer over a supported network, subject to verification and fees.</p></div></div></div></div></div>
 <div class="container">
 <div class="capital-flow" aria-label="Proposed sponsor-to-shopper-to-Cronos reward and onboarding flow">
@@ -283,6 +305,24 @@ function compute(){
  const revenue=payableWallets*inputs.walletFee;
  return{usPop:US_POP,tamCap,uniqueBase,potentialUsers,visitsMonth,visitsYear,participatingVisitsYear,eligibleTxns,groceryTxns,walletOwners,chiWallets,croWallets,totalWallets,cryptoSignups,payableWallets,croRewardTxns,croWelcomeTxns,totalTokenTxns,annual,cro,croRewardTokens,croBonusTokens,revenue}
 }
+
+function syncHomeModel(){
+ const slot=document.getElementById('home-model-slot');
+ if(!slot || !slot.querySelector('.dashboard'))return;
+ const source=document.querySelector('#model .dashboard');
+ for(const node of source.querySelectorAll('[id]')){
+  const peer=document.getElementById('home-'+node.id);
+  if(!peer)continue;
+  if(node.tagName==='INPUT')continue;
+  if(node.id==='bars')peer.innerHTML=node.innerHTML;
+  else if(node.matches('strong[id],p[id]'))peer.textContent=node.textContent;
+ }
+ for(const item of spec){
+  const range=document.getElementById('home-'+item.id),num=document.getElementById('home-'+item.id+'-num');
+  if(range)range.value=String(inputs[item.id]);
+  if(num && document.activeElement!==num)num.value=String(inputs[item.id]);
+ }
+}
 let computed;function set(id,v){const el=document.getElementById(id);if(el)el.textContent=v}
 function render(){
  const a=computed=compute();
@@ -298,6 +338,7 @@ function render(){
  set('supply-warning',a.annual>20000000000?'Token supply warning: '+short(a.annual)+' modeled CHI/year exceeds the previously described 20B CHI reward allocation; reward terms or available funding would need revision.':'Token supply comparison: '+short(a.annual)+' modeled annual CHI versus the previously described 20B reward allocation; actual funding remains unverified.');
  const series=[['Annual store visits',a.visitsYear,''],['Participating visits',a.participatingVisitsYear,'b'],['Qualifying visits',a.eligibleTxns,'c'],['CHI reward TXNs',a.groceryTxns,'d'],['CRO reward TXNs',a.croRewardTxns,'b']];
  const max=Math.max(...series.map(x=>x[1]),1);document.getElementById('bars').innerHTML=series.map(x=>'<div class="barrow"><span>'+x[0]+'</span><div class="bartrack"><div class="barfill '+x[2]+'" style="width:'+Math.max(0,Math.min(100,100*x[1]/max))+'%"></div></div><strong>'+short(x[1])+'</strong></div>').join('');
+ syncHomeModel();
 }
 document.getElementById('reset').addEventListener('click',()=>{for(const item of spec){inputs[item.id]=defaults[item.id];document.getElementById(item.id).value=item.value;document.getElementById(item.id+'-num').value=item.value}render()});
 document.getElementById('export').addEventListener('click',()=>{
@@ -312,6 +353,34 @@ document.getElementById('export').addEventListener('click',()=>{
  const csv=out.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');
  const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));link.download='chi-cronos-grocery-only-model.csv';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
 });
+
+// Clone the working Page 3 calculator, prefix all DOM ids, and bind both
+// locations to the same levers and results, preventing duplicate-id conflicts.
+const homeModelSlot=document.getElementById('home-model-slot');
+if(homeModelSlot){
+ const sourceDashboard=document.querySelector('#model .dashboard');
+ const homeDashboard=sourceDashboard.cloneNode(true);
+ homeDashboard.classList.add('home-dashboard');
+ for(const el of homeDashboard.querySelectorAll('[id]'))el.id='home-'+el.id;
+ for(const label of homeDashboard.querySelectorAll('label[for]'))label.htmlFor='home-'+label.htmlFor;
+ homeModelSlot.append(homeDashboard);
+ for(const item of spec){
+  const range=document.getElementById('home-'+item.id),num=document.getElementById('home-'+item.id+'-num');
+  const update=v=>{
+   const raw=Number(v);if(!Number.isFinite(raw))return;
+   const clamped=Math.min(item.max,Math.max(item.min,raw));
+   const value=(item.id==='croPerReward'||item.id==='croWelcome')?Math.round(clamped):clamped;
+   inputs[item.id]=value;
+   document.getElementById(item.id).value=String(value);
+   document.getElementById(item.id+'-num').value=String(value);
+   range.value=String(value);num.value=String(value);render();
+  };
+  range.addEventListener('input',e=>update(e.target.value));
+  num.addEventListener('change',e=>update(e.target.value));
+ }
+ document.getElementById('home-reset').addEventListener('click',()=>document.getElementById('reset').click());
+ document.getElementById('home-export').addEventListener('click',()=>document.getElementById('export').click());
+}
 const links=document.querySelectorAll('[data-nav]');function route(){const page=location.hash.replace('#','')||'pitch';const target=['pitch','distribution','model','deal'].includes(page)?page:'pitch';document.querySelectorAll('.page').forEach(e=>e.classList.toggle('active',e.id===target));links.forEach(e=>{const on=e.getAttribute('data-nav')===target;e.classList.toggle('active',on);on?e.setAttribute('aria-current','page'):e.removeAttribute('aria-current')});document.getElementById('nav-links').classList.remove('open');document.getElementById('menu').setAttribute('aria-expanded','false');window.scrollTo({top:0,behavior:'instant'});document.title=target==='pitch'?'CHI × Cronos | The Everyday Onramp':target==='distribution'?'CHI × Cronos | Distribution Network':target==='model'?'CHI × Cronos | Growth Model':'CHI × Cronos | The Deal'}window.addEventListener('hashchange',route);document.getElementById('menu').addEventListener('click',()=>{let nav=document.getElementById('nav-links');nav.classList.toggle('open');document.getElementById('menu').setAttribute('aria-expanded',String(nav.classList.contains('open')))});render();route();if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))}
 })();
 </script></body></html>
